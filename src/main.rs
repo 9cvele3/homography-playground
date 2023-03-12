@@ -1,15 +1,17 @@
 use eframe::egui;
+use egui::ColorImage;
 
-#[derive(Default)]
+mod types;
+
 struct AppData {
-    img: Image,
+    color_image: ColorImage,
 }
 
 impl AppData {
     fn new() -> Self {
-        let path = std::path::PathBuf::from("./img/lenna.png");
+        let path = std::path::PathBuf::from("./img/lena-gray.png");
         let color_image = load_image_from_path(&path).unwrap();
-        Self{ img }
+        Self{ color_image }
     }
 }
 
@@ -20,7 +22,9 @@ impl eframe::epi::App for AppData {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.image(self.img.texture, self.img.size);
+            let texture = ctx.load_texture(format!("img1"), self.color_image.clone());
+            let size = egui::Vec2::new(self.color_image.size[0] as f32, self.color_image.size[1] as f32);
+            ui.image(&texture, size);
         });
 
         ctx.request_repaint(); // we want max framerate
@@ -48,5 +52,5 @@ fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, imag
 fn main() -> std::io::Result<()> {
     let options = Default::default();
 
-    eframe::run_native(Box::new(AppData::default()), options);
+    eframe::run_native(Box::new(AppData::new()), options);
 }
