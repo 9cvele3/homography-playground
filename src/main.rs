@@ -6,7 +6,7 @@ mod types;
 
 struct AppData {
     color_image: ColorImage,
-    h3s: Vec<Projection>,
+    h3s: Vec<Homography>,
 }
 
 impl AppData {
@@ -14,7 +14,9 @@ impl AppData {
         let path = std::path::PathBuf::from("./img/lena-gray.png");
         let color_image = load_image_from_path(&path).unwrap();
 
-        let h3s = vec![Projection::scale(1.0, 1.0), Projection::translate(30.0, 15.0)];
+//        let h3s = vec![Projection::scale(1.0, 1.0), Projection::translate(30.0, 15.0)];
+//        let h3s = vec![Projection::scale(1.0, 1.0); 10];
+        let h3s = vec![Homography::I; 10];
 
         Self {
             color_image,
@@ -32,13 +34,15 @@ impl eframe::epi::App for AppData {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
                 ui.horizontal(|ui|{
-
+                    for (index, h3) in self.h3s.iter_mut().enumerate() {
+                        display_h3(ui, h3, index.try_into().unwrap());
+                    }
                 });
 
                 let mut h = Projection::scale(1.0, 1.0);
 
                 for h3 in self.h3s.iter() {
-                    h = *h3 * h;
+                    h = get_projection(h3) * h;
                 }
 
                 let img = warp_image(&self.color_image, &h);
@@ -99,6 +103,95 @@ fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, imag
         .collect();
     let image = egui::ColorImage{size, pixels};
     Ok(image)
+}
+
+fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
+    let h3 = [12.0; 9];
+    ui.vertical(|ui|{
+        egui::Grid::new("some_unique_id")
+        .striped(true)
+        .show(ui, |ui| {
+            ui.label(format!("{:.5}", h3[0]));
+            ui.label(format!("{:.5}", h3[1]));
+            ui.label(format!("{:.5}", h3[2]));
+            ui.end_row();
+
+            ui.label(format!("{:.5}", h3[3]));
+            ui.label(format!("{:.5}", h3[4]));
+            ui.label(format!("{:.5}", h3[5]));
+            ui.end_row();
+
+            ui.label(format!("{:.5}", h3[6]));
+            ui.label(format!("{:.5}", h3[7]));
+            ui.label(format!("{:.5}", h3[8]));
+            ui.end_row();
+        });
+    });
+}
+
+#[derive(PartialEq, Clone)]
+enum Homography {
+    I,
+    R {
+        angle: f32
+    },
+    T {
+        tx: f32,
+        ty: f32,
+    },
+    S {
+        sx: f32,
+        sy: f32,
+    },
+}
+
+fn get_projection(h: &Homography) -> Projection {
+    match h {
+        Homography::I => { Projection::scale(1.0, 1.0) },
+        Homography::R{angle} => { Projection::rotate(*angle * 2.0 * 3.14 / 360.0 ) },
+        Homography::T{tx, ty} => {Projection::translate(*tx, *ty)},
+        Homography::S{sx, sy} => {Projection::scale(*sx, *sy)},
+    }
+}
+
+fn display_h3(ui: &mut egui::Ui, h: &mut Homography, index: i64) {
+    ui.vertical(|ui|{
+        match h {
+            Homography::I => {
+                ui.label("Eye");
+            },
+            Homography::R{angle} => {
+                ui.label("Rot");
+                ui.add(egui::Slider::new(angle, 0.0..=360.0).text("deg"));
+            },
+            Homography::S{sx, sy} => {
+                ui.label("Scale");
+                ui.add(egui::Slider::new(sx, 0.00001..=5.0));
+                ui.add(egui::Slider::new(sy, 0.00001..=5.0));
+
+            },
+            Homography::T{tx, ty}=>{
+                ui.label("Trans");
+                ui.add(egui::Slider::new(tx, -1000.0..=1000.0));
+                ui.add(egui::Slider::new(ty, -1000.0..=1000.0));
+            },
+        }
+
+        // TODO: on/off
+
+        // combo - change homography type
+        egui::ComboBox::from_id_source(index)
+            .width(100.0)
+            //.selected_text(text)
+            .show_ui(ui, |ui|{
+                ui.selectable_value(h, Homography::I, format!("I"));
+                ui.selectable_value(h, Homography::R{angle: 0.0}, format!("Rot"));
+                ui.selectable_value(h, Homography::S{sx: 1.0, sy: 1.0}, format!("Scale"));
+                ui.selectable_value(h, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
+            });
+
+        // TODO: inverse
+    });
 }
 
 fn main() -> std::io::Result<()> {
