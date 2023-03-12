@@ -14,8 +14,6 @@ impl AppData {
         let path = std::path::PathBuf::from("./img/lena-gray.png");
         let color_image = load_image_from_path(&path).unwrap();
 
-//        let h3s = vec![Projection::scale(1.0, 1.0), Projection::translate(30.0, 15.0)];
-//        let h3s = vec![Projection::scale(1.0, 1.0); 10];
         let h3s = vec![Homography::I; 10];
 
         Self {
@@ -33,11 +31,17 @@ impl eframe::epi::App for AppData {
     fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
-                ui.horizontal(|ui|{
-                    for (index, h3) in self.h3s.iter_mut().enumerate() {
-                        display_h3(ui, h3, index.try_into().unwrap());
-                    }
-                });
+                egui::ScrollArea::vertical()
+                    .hscroll(true)
+                    .vscroll(false)
+                    .always_show_scroll(true)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui|{
+                            for (index, h3) in self.h3s.iter_mut().enumerate() {
+                                display_h3(ui, h3, index.try_into().unwrap());
+                            }
+                        });
+                    });
 
                 let mut h = Projection::scale(1.0, 1.0);
 
@@ -155,22 +159,30 @@ fn get_projection(h: &Homography) -> Projection {
 }
 
 fn display_h3(ui: &mut egui::Ui, h: &mut Homography, index: i64) {
+    let mut selected_text = "";
     ui.vertical(|ui|{
         match h {
             Homography::I => {
+                selected_text = "I";
                 ui.label("Eye");
             },
             Homography::R{angle} => {
+                selected_text = "Rot";
+
                 ui.label("Rot");
-                ui.add(egui::Slider::new(angle, 0.0..=360.0).text("deg"));
+                ui.add(egui::Slider::new(angle, -360.0..=360.0).text("deg"));
             },
             Homography::S{sx, sy} => {
+                selected_text = "Scale";
+
                 ui.label("Scale");
                 ui.add(egui::Slider::new(sx, 0.00001..=5.0));
                 ui.add(egui::Slider::new(sy, 0.00001..=5.0));
 
             },
             Homography::T{tx, ty}=>{
+                selected_text = "Trans";
+
                 ui.label("Trans");
                 ui.add(egui::Slider::new(tx, -1000.0..=1000.0));
                 ui.add(egui::Slider::new(ty, -1000.0..=1000.0));
@@ -182,7 +194,7 @@ fn display_h3(ui: &mut egui::Ui, h: &mut Homography, index: i64) {
         // combo - change homography type
         egui::ComboBox::from_id_source(index)
             .width(100.0)
-            //.selected_text(text)
+            .selected_text(selected_text)
             .show_ui(ui, |ui|{
                 ui.selectable_value(h, Homography::I, format!("I"));
                 ui.selectable_value(h, Homography::R{angle: 0.0}, format!("Rot"));
@@ -191,6 +203,12 @@ fn display_h3(ui: &mut egui::Ui, h: &mut Homography, index: i64) {
             });
 
         // TODO: inverse
+
+        // anything can be R*S*T (just the 3)
+        // projection
+        // coordinate axes
+        // local coordinate system
+        // global coordinate system
     });
 }
 
