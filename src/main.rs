@@ -4,62 +4,6 @@ use egui::ColorImage;
 
 mod types;
 
-struct AppData {
-    color_image: ColorImage,
-    h3s: Vec<Homography>,
-}
-
-impl AppData {
-    fn new() -> Self {
-        let path = std::path::PathBuf::from("./img/lena-gray.png");
-        let color_image = load_image_from_path(&path).unwrap();
-
-        let h3s = vec![Homography::I; 10];
-
-        Self {
-            color_image,
-            h3s,
-        }
-    }
-}
-
-impl eframe::epi::App for AppData {
-    fn name(&self) -> &str {
-        "Homography Playground"
-    }
-
-    fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical(|ui|{
-                egui::ScrollArea::vertical()
-                    .hscroll(true)
-                    .vscroll(false)
-                    .always_show_scroll(true)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui|{
-                            for (index, h3) in self.h3s.iter_mut().enumerate() {
-                                display_h3(ui, h3, index.try_into().unwrap());
-                            }
-                        });
-                    });
-
-                let mut h = Projection::scale(1.0, 1.0);
-
-                for h3 in self.h3s.iter() {
-                    h = get_projection(h3) * h;
-                }
-
-                let img = warp_image(&self.color_image, &h);
-                let size = egui::Vec2::new(img.size[0] as f32, img.size[1] as f32);
-
-                let texture = ctx.load_texture(format!("img1"), img.clone());
-                ui.image(&texture, size);
-            });
-        });
-
-        ctx.request_repaint(); // we want max framerate
-    }
-}
 
 fn warp_image(im: &egui::ColorImage, h3: &Projection) -> egui::ColorImage {
     let size = im.size;
@@ -131,6 +75,11 @@ fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
             ui.end_row();
         });
     });
+}
+
+struct UIMatrix {
+    h3: Homography,
+    on: bool,
 }
 
 #[derive(PartialEq, Clone)]
@@ -210,6 +159,70 @@ fn display_h3(ui: &mut egui::Ui, h: &mut Homography, index: i64) {
         // local coordinate system
         // global coordinate system
     });
+}
+
+struct AppData {
+    color_image: ColorImage,
+    h3s: Vec<Homography>,
+}
+
+impl AppData {
+    fn new() -> Self {
+        let path = std::path::PathBuf::from("./img/lena-gray.png");
+        let color_image = load_image_from_path(&path).unwrap();
+
+        let h3s = vec![Homography::I; 10];
+
+        Self {
+            color_image,
+            h3s,
+        }
+    }
+
+    fn display_homographies_panel(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .hscroll(true)
+            .vscroll(false)
+            .always_show_scroll(true)
+            .show(ui, |ui| {
+                ui.horizontal(|ui|{
+                    for (index, h3) in self.h3s.iter_mut().enumerate() {
+                        display_h3(ui, h3, index.try_into().unwrap());
+                    }
+                });
+            });
+    }
+
+    fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        let mut h = Projection::scale(1.0, 1.0);
+
+        for h3 in self.h3s.iter() {
+            h = get_projection(h3) * h;
+        }
+
+        let img = warp_image(&self.color_image, &h);
+        let size = egui::Vec2::new(img.size[0] as f32, img.size[1] as f32);
+
+        let texture = ctx.load_texture(format!("img1"), img.clone());
+        ui.image(&texture, size);
+    }
+}
+
+impl eframe::epi::App for AppData {
+    fn name(&self) -> &str {
+        "Homography Playground"
+    }
+
+    fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.vertical(|ui|{
+                self.display_homographies_panel(ui);
+                self.display_image(ctx, ui);
+            });
+        });
+
+        ctx.request_repaint(); // we want max framerate
+    }
 }
 
 fn main() -> std::io::Result<()> {
