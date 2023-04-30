@@ -4,7 +4,6 @@ use egui::ColorImage;
 
 mod types;
 
-
 fn warp_image(im: &egui::ColorImage, h3: &Projection) -> egui::ColorImage {
     let size = im.size;
     let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
@@ -77,11 +76,6 @@ fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
     });
 }
 
-struct UIMatrix {
-    h3: Homography,
-    on: bool,
-}
-
 #[derive(PartialEq, Clone)]
 enum Homography {
     I,
@@ -98,19 +92,25 @@ enum Homography {
     },
 }
 
-fn get_projection(h: &Homography) -> Projection {
-    match h {
+fn get_projection(uimx: &UIMatrix) -> Projection {
+    if !uimx.on {
+        return Projection::scale(1.0, 1.0);
+    }
+
+    match uimx.h3 {
         Homography::I => { Projection::scale(1.0, 1.0) },
-        Homography::R{angle} => { Projection::rotate(*angle * 2.0 * 3.14 / 360.0 ) },
-        Homography::T{tx, ty} => {Projection::translate(*tx, *ty)},
-        Homography::S{sx, sy} => {Projection::scale(*sx, *sy)},
+        Homography::R{angle} => { Projection::rotate(angle * 2.0 * 3.14 / 360.0 ) },
+        Homography::T{tx, ty} => {Projection::translate(tx, ty)},
+        Homography::S{sx, sy} => {Projection::scale(sx, sy)},
     }
 }
 
-fn display_h3(ui: &mut egui::Ui, h: &mut Homography, index: i64) {
+fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
     let mut selected_text = "";
+    let h3 = &mut uimx.h3;
+
     ui.vertical(|ui|{
-        match h {
+        match h3 {
             Homography::I => {
                 selected_text = "I";
                 ui.label("Eye");
@@ -145,10 +145,10 @@ fn display_h3(ui: &mut egui::Ui, h: &mut Homography, index: i64) {
             .width(100.0)
             .selected_text(selected_text)
             .show_ui(ui, |ui|{
-                ui.selectable_value(h, Homography::I, format!("I"));
-                ui.selectable_value(h, Homography::R{angle: 0.0}, format!("Rot"));
-                ui.selectable_value(h, Homography::S{sx: 1.0, sy: 1.0}, format!("Scale"));
-                ui.selectable_value(h, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
+                ui.selectable_value(h3, Homography::I, format!("I"));
+                ui.selectable_value(h3, Homography::R{angle: 0.0}, format!("Rot"));
+                ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0}, format!("Scale"));
+                ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
             });
 
         // TODO: inverse
@@ -158,12 +158,32 @@ fn display_h3(ui: &mut egui::Ui, h: &mut Homography, index: i64) {
         // coordinate axes
         // local coordinate system
         // global coordinate system
+        // resize output image
     });
+}
+
+#[derive(Clone)]
+struct UIMatrix {
+    h3: Homography,
+    on: bool,
+    inverse: bool,
+    name: String,
+}
+
+impl UIMatrix {
+    fn new() -> Self {
+        UIMatrix {
+            h3: Homography::I,
+            on: true,
+            inverse: false,
+            name: "".to_string(),
+        }
+    }
 }
 
 struct AppData {
     color_image: ColorImage,
-    h3s: Vec<Homography>,
+    h3s: Vec<UIMatrix>,
 }
 
 impl AppData {
@@ -171,7 +191,7 @@ impl AppData {
         let path = std::path::PathBuf::from("./img/lena-gray.png");
         let color_image = load_image_from_path(&path).unwrap();
 
-        let h3s = vec![Homography::I; 10];
+        let h3s = vec![UIMatrix::new(); 10];
 
         Self {
             color_image,
@@ -186,8 +206,8 @@ impl AppData {
             .always_show_scroll(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui|{
-                    for (index, h3) in self.h3s.iter_mut().enumerate() {
-                        display_h3(ui, h3, index.try_into().unwrap());
+                    for (index, uimx) in self.h3s.iter_mut().enumerate() {
+                        display_h3(ui, uimx, index.try_into().unwrap());
                     }
                 });
             });
@@ -196,8 +216,8 @@ impl AppData {
     fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let mut h = Projection::scale(1.0, 1.0);
 
-        for h3 in self.h3s.iter() {
-            h = get_projection(h3) * h;
+        for uimx in self.h3s.iter() {
+            h = get_projection(&uimx) * h;
         }
 
         let img = warp_image(&self.color_image, &h);
