@@ -97,12 +97,18 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         return Projection::scale(1.0, 1.0);
     }
 
-    match uimx.h3 {
+    let h3 = match uimx.h3 {
         Homography::I => { Projection::scale(1.0, 1.0) },
         Homography::R{angle} => { Projection::rotate(angle * 2.0 * 3.14 / 360.0 ) },
         Homography::T{tx, ty} => {Projection::translate(tx, ty)},
         Homography::S{sx, sy} => {Projection::scale(sx, sy)},
+    };
+
+    if uimx.inverse {
+        return h3.invert();
     }
+
+    h3
 }
 
 fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
@@ -139,6 +145,8 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
         }
 
         // TODO: on/off
+        ui.checkbox(&mut uimx.on, "on/off".to_string());
+        ui.checkbox(&mut uimx.inverse, "inverse".to_string());
 
         // combo - change homography type
         egui::ComboBox::from_id_source(index)
