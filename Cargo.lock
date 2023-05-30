@@ -817,6 +817,7 @@ dependencies = [
 name = "ezinspector"
 version = "0.1.0"
 dependencies = [
+ "conv",
  "eframe",
  "egui",
  "epi",

@@ -53,25 +53,43 @@ fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, imag
 }
 
 fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
-    let h3 = [12.0; 9];
+    use conv::ValueInto;
+    //let hvalues: [f32; 9] = h3.into();
     ui.vertical(|ui|{
         egui::Grid::new("some_unique_id")
         .striped(true)
         .show(ui, |ui| {
-            ui.label(format!("{:.5}", h3[0]));
-            ui.label(format!("{:.5}", h3[1]));
-            ui.label(format!("{:.5}", h3[2]));
+            let h3_str = format!("{:?}", h3);
+            let istart = h3_str.find("[");
+            let iend = h3_str.find("]");
+
+            if istart.is_some() && iend.is_some() {
+                let coeffs = &h3_str[istart.unwrap() + 1..iend.unwrap()];
+                //ui.label(coeffs);
+                for (i, coeff) in coeffs.split(',').enumerate() {
+                    if i % 3 == 0 && i > 0{
+                        ui.end_row();
+                    }
+
+                    ui.label(format!("{:.5}", coeff));
+                }
+            }
+            /*
+            ui.label(format!("{:.5}", hvalues[0]));
+            ui.label(format!("{:.5}", hvalues[1]));
+            ui.label(format!("{:.5}", hvalues[2]));
             ui.end_row();
 
-            ui.label(format!("{:.5}", h3[3]));
-            ui.label(format!("{:.5}", h3[4]));
-            ui.label(format!("{:.5}", h3[5]));
+            ui.label(format!("{:.5}", hvalues[3]));
+            ui.label(format!("{:.5}", hvalues[4]));
+            ui.label(format!("{:.5}", hvalues[5]));
             ui.end_row();
 
-            ui.label(format!("{:.5}", h3[6]));
-            ui.label(format!("{:.5}", h3[7]));
-            ui.label(format!("{:.5}", h3[8]));
+            ui.label(format!("{:.5}", hvalues[6]));
+            ui.label(format!("{:.5}", hvalues[7]));
+            ui.label(format!("{:.5}", hvalues[8]));
             ui.end_row();
+            */
         });
     });
 }
@@ -227,6 +245,8 @@ impl AppData {
         for uimx in self.h3s.iter() {
             h = get_projection(&uimx) * h;
         }
+
+        display_homography(ui, &h);
 
         let img = warp_image(&self.color_image, &h);
         let size = egui::Vec2::new(img.size[0] as f32, img.size[1] as f32);

@@ -11,3 +11,4 @@ eframe = "0.17.0"
 epi = "0.17.0"
 image = { version = "0.24", features = ["jpeg", "png"] }
 imageproc = "0.23.0"
+conv = "0.3.3"
