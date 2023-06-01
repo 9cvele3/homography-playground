@@ -142,11 +142,9 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.add(egui::Slider::new(sy, 0.00001..=5.0));
                 ui.checkbox(isotropic, "isotropic".to_string());
 
-                /*
                 if *isotropic {
-                    sy = *sx;
+                    *sy = *sx;
                 }
-                */
             },
             Homography::T{tx, ty}=>{
                 selected_text = "Trans";
