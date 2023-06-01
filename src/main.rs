@@ -4,7 +4,7 @@ use egui::ColorImage;
 
 mod types;
 
-fn warp_image(im: &egui::ColorImage, h3: &Projection) -> egui::ColorImage {
+fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) -> egui::ColorImage {
     let size = im.size;
     let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
     for pix in im.pixels.iter() {
@@ -31,7 +31,9 @@ fn warp_image(im: &egui::ColorImage, h3: &Projection) -> egui::ColorImage {
             egui::Color32::from_rgba_unmultiplied(lr, lg, lb, la)
         })
     .collect();
-    egui::ColorImage{size, pixels}
+
+    let out_size: [usize; 2] = [out_w as usize, out_h as usize];
+    egui::ColorImage{size: out_size, pixels}
 }
 
 fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, image::ImageError> {
@@ -53,8 +55,6 @@ fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, imag
 }
 
 fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
-    use conv::ValueInto;
-    //let hvalues: [f32; 9] = h3.into();
     ui.vertical(|ui|{
         egui::Grid::new("some_unique_id")
         .striped(true)
@@ -74,22 +74,6 @@ fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
                     ui.label(format!("{:.5}", coeff));
                 }
             }
-            /*
-            ui.label(format!("{:.5}", hvalues[0]));
-            ui.label(format!("{:.5}", hvalues[1]));
-            ui.label(format!("{:.5}", hvalues[2]));
-            ui.end_row();
-
-            ui.label(format!("{:.5}", hvalues[3]));
-            ui.label(format!("{:.5}", hvalues[4]));
-            ui.label(format!("{:.5}", hvalues[5]));
-            ui.end_row();
-
-            ui.label(format!("{:.5}", hvalues[6]));
-            ui.label(format!("{:.5}", hvalues[7]));
-            ui.label(format!("{:.5}", hvalues[8]));
-            ui.end_row();
-            */
         });
     });
 }
@@ -162,7 +146,6 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
             },
         }
 
-        // TODO: on/off
         ui.checkbox(&mut uimx.on, "on/off".to_string());
         ui.checkbox(&mut uimx.inverse, "inverse".to_string());
 
@@ -176,8 +159,6 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0}, format!("Scale"));
                 ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
             });
-
-        // TODO: inverse
 
         // anything can be R*S*T (just the 3)
         // projection
@@ -248,11 +229,19 @@ impl AppData {
 
         display_homography(ui, &h);
 
-        let img = warp_image(&self.color_image, &h);
-        let size = egui::Vec2::new(img.size[0] as f32, img.size[1] as f32);
+        let (out_w, out_h) = {
+            if true {
+                (self.color_image.size[0] as u32, self.color_image.size[1] as u32)
+            } else {
+                (ui.available_width() as u32, ui.available_height() as u32)
+            }
+        };
+
+        let img = warp_image(out_w, out_h, &self.color_image, &h);
+        let out_size = egui::Vec2::new(out_w as f32, out_h as f32);
 
         let texture = ctx.load_texture(format!("img1"), img.clone());
-        ui.image(&texture, size);
+        ui.image(&texture, out_size);
     }
 }
 
@@ -278,3 +267,4 @@ fn main() -> std::io::Result<()> {
 
     eframe::run_native(Box::new(AppData::new()), options);
 }
+
