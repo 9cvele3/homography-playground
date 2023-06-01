@@ -5,6 +5,7 @@ use egui::ColorImage;
 mod types;
 
 fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) -> egui::ColorImage {
+    // convert to image::Image
     let size = im.size;
     let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
     for pix in im.pixels.iter() {
@@ -14,7 +15,6 @@ fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) ->
         pixels.push(pix.a());
     }
 
-    // convert to image::Image
     let tmp_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> =
         image::ImageBuffer::from_raw(size[0] as u32, size[1] as u32, pixels)
         .expect("bad conversion");
@@ -95,6 +95,7 @@ enum Homography {
     S {
         sx: f32,
         sy: f32,
+        isotropic: bool,
     },
 }
 
@@ -107,7 +108,7 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         Homography::I => { Projection::scale(1.0, 1.0) },
         Homography::R{angle} => { Projection::rotate(angle * 2.0 * 3.14 / 360.0 ) },
         Homography::T{tx, ty} => {Projection::translate(tx, ty)},
-        Homography::S{sx, sy} => {Projection::scale(sx, sy)},
+        Homography::S{sx, sy, isotropic} => {Projection::scale(sx, sy)},
     };
 
     if uimx.inverse {
@@ -133,13 +134,19 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.label("Rot");
                 ui.add(egui::Slider::new(angle, -360.0..=360.0).text("deg"));
             },
-            Homography::S{sx, sy} => {
+            Homography::S{sx, sy, isotropic} => {
                 selected_text = "Scale";
 
                 ui.label("Scale");
                 ui.add(egui::Slider::new(sx, 0.00001..=5.0));
                 ui.add(egui::Slider::new(sy, 0.00001..=5.0));
+                ui.checkbox(isotropic, "isotropic".to_string());
 
+                /*
+                if *isotropic {
+                    sy = *sx;
+                }
+                */
             },
             Homography::T{tx, ty}=>{
                 selected_text = "Trans";
@@ -160,7 +167,7 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
             .show_ui(ui, |ui|{
                 ui.selectable_value(h3, Homography::I, format!("I"));
                 ui.selectable_value(h3, Homography::R{angle: 0.0}, format!("Rot"));
-                ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0}, format!("Scale"));
+                ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0, isotropic: false}, format!("Scale"));
                 ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
             });
 
@@ -237,6 +244,10 @@ impl AppData {
             if false {
                 (self.color_image.size[0] as u32, self.color_image.size[1] as u32)
             } else {
+                let tx = (ui.available_width() - self.color_image.size[0] as f32) / 2.0;
+                let ty = (ui.available_height() - self.color_image.size[1] as f32)/ 2.0;
+                let translation = Projection::translate(tx, ty);
+                h = translation * h;
                 (ui.available_width() as u32, ui.available_height() as u32)
             }
         };
