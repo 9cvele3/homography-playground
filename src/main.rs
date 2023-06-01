@@ -1,5 +1,5 @@
 use eframe::egui;
-use imageproc::geometric_transformations::{Projection, warp, Interpolation};
+use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
 use egui::ColorImage;
 
 mod types;
@@ -14,13 +14,18 @@ fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) ->
         pixels.push(pix.a());
     }
 
+    // convert to image::Image
     let tmp_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> =
         image::ImageBuffer::from_raw(size[0] as u32, size[1] as u32, pixels)
         .expect("bad conversion");
 
-    let new_img = warp(&tmp_img, h3, Interpolation::Bilinear, [255, 0, 255, 117].into());
+    let out_size: [usize; 2] = [out_w as usize, out_h as usize];
+    let mut new_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> =
+        image::ImageBuffer::new(out_w, out_h);
 
+    warp_into(&tmp_img, h3, Interpolation::Bilinear, [255, 0, 255, 117].into(), &mut new_img);
 
+    // convert back to egui::ColorImage
     let pixels = new_img.as_raw()
         .chunks_exact(4)
         .map(|p| {
@@ -32,7 +37,6 @@ fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) ->
         })
     .collect();
 
-    let out_size: [usize; 2] = [out_w as usize, out_h as usize];
     egui::ColorImage{size: out_size, pixels}
 }
 
@@ -230,7 +234,7 @@ impl AppData {
         display_homography(ui, &h);
 
         let (out_w, out_h) = {
-            if true {
+            if false {
                 (self.color_image.size[0] as u32, self.color_image.size[1] as u32)
             } else {
                 (ui.available_width() as u32, ui.available_height() as u32)
