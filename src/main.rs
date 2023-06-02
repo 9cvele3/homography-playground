@@ -200,6 +200,7 @@ impl UIMatrix {
 struct AppData {
     color_image: ColorImage,
     h3s: Vec<UIMatrix>,
+    zoom_factor: f32,
 }
 
 impl AppData {
@@ -212,6 +213,7 @@ impl AppData {
         Self {
             color_image,
             h3s,
+            zoom_factor: 1.0,
         }
     }
 
@@ -242,19 +244,27 @@ impl AppData {
             if false {
                 (self.color_image.size[0] as u32, self.color_image.size[1] as u32)
             } else {
-                let tx = (ui.available_width() - self.color_image.size[0] as f32) / 2.0;
-                let ty = (ui.available_height() - self.color_image.size[1] as f32)/ 2.0;
+                let out_w = ui.available_width() * self.zoom_factor;
+                let out_h = ui.available_height() * self.zoom_factor;
+
+                let tx = (out_w - self.color_image.size[0] as f32) / 2.0;
+                let ty = (out_h - self.color_image.size[1] as f32)/ 2.0;
                 let translation = Projection::translate(tx, ty);
                 h = translation * h;
-                (ui.available_width() as u32, ui.available_height() as u32)
+
+                (out_w as u32, out_h as u32)
             }
         };
 
         let img = warp_image(out_w, out_h, &self.color_image, &h);
-        let out_size = egui::Vec2::new(out_w as f32, out_h as f32);
+        let out_size = egui::Vec2::new(out_w as f32 / self.zoom_factor, out_h as f32 / self.zoom_factor);
 
         let texture = ctx.load_texture(format!("img1"), img.clone());
         ui.image(&texture, out_size);
+    }
+
+    fn display_zoom_factor(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        ui.add(egui::Slider::new(&mut self.zoom_factor, 0.1..=2.0).text("zoom factor"));
     }
 }
 
@@ -267,6 +277,7 @@ impl eframe::epi::App for AppData {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
                 self.display_homographies_panel(ui);
+                self.display_zoom_factor(ctx, ui);
                 self.display_image(ctx, ui);
             });
         });
