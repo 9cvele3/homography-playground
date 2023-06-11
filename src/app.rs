@@ -56,6 +56,24 @@ fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, imag
     Ok(image)
 }
 
+fn get_lena() -> Result<egui::ColorImage, image::ImageError> {
+    let rgba = include_bytes!("../img/lena.bgra").to_vec();
+
+    let pixels = rgba.chunks_exact(4)
+        .map(|p| {
+             let lr = p[0];
+             let lg = p[1];
+             let lb = p[2];
+
+             egui::Color32::from_rgb(lr, lg, lb)
+         })
+        .collect();
+
+    let size = [225, 225];
+    let image = egui::ColorImage{ size, pixels };
+    Ok(image)
+}
+
 fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
     ui.vertical(|ui|{
         egui::Grid::new("some_unique_id")
@@ -204,7 +222,15 @@ pub struct AppData {
 impl AppData {
     pub fn new() -> Self {
         let path = std::path::PathBuf::from("./img/lena-gray.png");
-        let color_image = load_image_from_path(&path).unwrap();
+        let color_image = {
+            let ci = load_image_from_path(&path);
+
+            if ci.is_ok() {
+                ci.unwrap()
+            } else {
+                get_lena().unwrap()
+            }
+        };
 
         let h3s = vec![UIMatrix::new(); 10];
 
@@ -282,6 +308,6 @@ impl eframe::App for AppData {
             });
         });
 
-        ctx.request_repaint(); // we want max framerate
+        //ctx.request_repaint(); // we want max framerate
     }
 }

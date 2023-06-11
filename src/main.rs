@@ -14,7 +14,7 @@ fn main() {
 // web using trunk
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    console_error_panic_hook::set_one();// panic -> console.error
+    console_error_panic_hook::set_once();// panic -> console.error
     tracing_wasm::set_as_global_default(); //tracing -> console.log
 
     let web_options = eframe::WebOptions::default();
