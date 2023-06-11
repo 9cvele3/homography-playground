@@ -61,9 +61,9 @@ fn get_lena() -> Result<egui::ColorImage, image::ImageError> {
 
     let pixels = rgba.chunks_exact(4)
         .map(|p| {
-             let lr = p[0];
+             let lb = p[0];
              let lg = p[1];
-             let lb = p[2];
+             let lr = p[2];
 
              egui::Color32::from_rgb(lr, lg, lb)
          })
