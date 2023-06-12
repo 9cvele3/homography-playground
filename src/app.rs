@@ -114,9 +114,9 @@ enum Homography {
         isotropic: bool,
     },
     P {
-        g: f32,
-        h: f32,
-        i: f32
+        h31: f32,
+        h32: f32,
+        h33: f32
     }
 }
 
@@ -130,7 +130,7 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         Homography::R{angle} => Projection::rotate(angle * 2.0 * 3.14 / 360.0 ),
         Homography::T{tx, ty} => Projection::translate(tx, ty),
         Homography::S{sx, sy, isotropic} => Projection::scale(sx, sy),
-        Homography::P{g, h, i} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, g, h, i]).expect("non invertible")
+        Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, h31, h32, h33]).expect("non invertible")
     };
 
     if uimx.inverse {
@@ -175,10 +175,11 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.add(egui::Slider::new(tx, -1000.0..=1000.0));
                 ui.add(egui::Slider::new(ty, -1000.0..=1000.0));
             },
-            Homography::P { g, h, i } => {
-                ui.add(egui::Slider::new(g, -0.01..=0.01));
-                ui.add(egui::Slider::new(h, -0.01..=0.01));
-                ui.add(egui::Slider::new(i, -5.0..=5.0));
+            Homography::P { h31, h32, h33 } => {
+                ui.label("Proj");
+                ui.add(egui::Slider::new(h31, -0.01..=0.01));
+                ui.add(egui::Slider::new(h32, -0.01..=0.01));
+                ui.add(egui::Slider::new(h33, -5.0..=5.0));
             }
         }
 
@@ -194,7 +195,7 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.selectable_value(h3, Homography::R{angle: 0.0}, format!("Rot"));
                 ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0, isotropic: false}, format!("Scale"));
                 ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
-                ui.selectable_value(h3, Homography::P{g: 0.0, h: 0.0, i: 1.0}, format!("Proj"));
+                ui.selectable_value(h3, Homography::P{h31: 0.0, h32: 0.0, h33: 1.0}, format!("Proj"));
             });
 
         // anything can be R*S*T (just the 3)
