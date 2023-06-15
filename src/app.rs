@@ -176,6 +176,8 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.add(egui::Slider::new(ty, -1000.0..=1000.0));
             },
             Homography::P { h31, h32, h33 } => {
+                selected_text = "Proj";
+
                 ui.label("Proj");
                 ui.add(egui::Slider::new(h31, -0.01..=0.01));
                 ui.add(egui::Slider::new(h32, -0.01..=0.01));
