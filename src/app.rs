@@ -231,6 +231,7 @@ impl UIMatrix {
 pub struct AppData {
     color_image: ColorImage,
     h3s: Vec<UIMatrix>,
+    fill_canvas: bool,
     zoom_factor: f32,
 }
 
@@ -252,6 +253,7 @@ impl AppData {
         Self {
             color_image,
             h3s,
+            fill_canvas: true,
             zoom_factor: 1.0,
         }
     }
@@ -280,11 +282,9 @@ impl AppData {
         display_homography(ui, &h);
 
         let (out_w, out_h) = {
-            if false {
-                (self.color_image.size[0] as u32, self.color_image.size[1] as u32)
-            } else {
-                let out_w = ui.available_width() * self.zoom_factor;
-                let out_h = ui.available_height() * self.zoom_factor;
+            if self.fill_canvas {
+                let out_w = ui.available_width() * (1.0 / self.zoom_factor);
+                let out_h = ui.available_height() * (1.0 / self.zoom_factor);
 
                 let tx = (out_w - self.color_image.size[0] as f32) / 2.0;
                 let ty = (out_h - self.color_image.size[1] as f32)/ 2.0;
@@ -292,6 +292,8 @@ impl AppData {
                 h = translation * h;
 
                 (out_w as u32, out_h as u32)
+            } else {
+                (self.color_image.size[0] as u32, self.color_image.size[1] as u32)
             }
         };
 
@@ -303,7 +305,11 @@ impl AppData {
     }
 
     fn display_zoom_factor(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
-        ui.add(egui::Slider::new(&mut self.zoom_factor, 0.1..=2.0).text("zoom factor"));
+        ui.checkbox(&mut self.fill_canvas, "Fill canvas".to_string());
+
+        if self.fill_canvas {
+            ui.add(egui::Slider::new(&mut self.zoom_factor, 1.0..=2.0).text("zoom factor (change if slow performance)"));
+        }
     }
 }
 
