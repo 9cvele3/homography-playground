@@ -232,7 +232,7 @@ pub struct AppData {
     color_image: ColorImage,
     h3s: Vec<UIMatrix>,
     fill_canvas: bool,
-    zoom_factor: f32,
+    out_size_factor: f32,
 }
 
 impl AppData {
@@ -254,7 +254,7 @@ impl AppData {
             color_image,
             h3s,
             fill_canvas: true,
-            zoom_factor: 1.0,
+            out_size_factor: 1.0,
         }
     }
 
@@ -283,8 +283,8 @@ impl AppData {
 
         let (out_w, out_h) = {
             if self.fill_canvas {
-                let out_w = ui.available_width() * (1.0 / self.zoom_factor);
-                let out_h = ui.available_height() * (1.0 / self.zoom_factor);
+                let out_w = ui.available_width() * self.out_size_factor;
+                let out_h = ui.available_height() * self.out_size_factor;
 
                 let tx = (out_w - self.color_image.size[0] as f32) / 2.0;
                 let ty = (out_h - self.color_image.size[1] as f32)/ 2.0;
@@ -298,17 +298,17 @@ impl AppData {
         };
 
         let img = warp_image(out_w, out_h, &self.color_image, &h);
-        let out_size = egui::Vec2::new(out_w as f32 / self.zoom_factor, out_h as f32 / self.zoom_factor);
+        let out_size = egui::Vec2::new(out_w as f32 / self.out_size_factor, out_h as f32 / self.out_size_factor);
 
         let texture = ctx.load_texture(format!("img1"), img.clone(), egui::TextureFilter::Linear);
         ui.image(&texture, out_size);
     }
 
-    fn display_zoom_factor(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+    fn display_out_size_factor(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         ui.checkbox(&mut self.fill_canvas, "Fill canvas".to_string());
 
         if self.fill_canvas {
-            ui.add(egui::Slider::new(&mut self.zoom_factor, 1.0..=2.0).text("zoom factor (change if slow performance)"));
+            ui.add(egui::Slider::new(&mut self.out_size_factor, 0.5..=1.0).text("out size factor (change if slow performance)"));
         }
     }
 }
@@ -324,7 +324,7 @@ impl eframe::App for AppData {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
                 self.display_homographies_panel(ui);
-                self.display_zoom_factor(ctx, ui);
+                self.display_out_size_factor(ctx, ui);
                 self.display_image(ctx, ui);
             });
         });
