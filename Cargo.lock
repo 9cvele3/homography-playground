@@ -814,18 +814,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ezinspector"
-version = "0.1.0"
-dependencies = [
- "conv",
- "eframe",
- "egui",
- "epi",
- "image",
- "imageproc",
-]
-
-[[package]]
 name = "fastrand"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1102,6 +1090,18 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "homography-playground"
+version = "0.1.0"
+dependencies = [
+ "conv",
+ "eframe",
+ "egui",
+ "epi",
+ "image",
+ "imageproc",
+]
 
 [[package]]
 name = "ident_case"
