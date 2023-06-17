@@ -20,7 +20,7 @@ Later, you can just use the files from `dist` directory.
 
 * Change your platform specific code (eg. reading files from disk)
 
-* run `cargo build` to build x86 app and generate `Cargo.lock`
+* run `cargo build --release` to build x86 app and generate `Cargo.lock`
 
 * edit `Cargo.lock` to avoid later problems when compiling to wasm: `failed to verify the checksum of ndk-sys v0.4.0`. Make the change based on this diff: https://github.com/alacritty/alacritty/pull/6665/files
 
