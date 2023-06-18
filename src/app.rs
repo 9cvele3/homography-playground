@@ -199,13 +199,6 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
                 ui.selectable_value(h3, Homography::P{h31: 0.0, h32: 0.0, h33: 1.0}, format!("Proj"));
             });
-
-        // anything can be R*S*T (just the 3)
-        // projection
-        // coordinate axes
-        // local coordinate system
-        // global coordinate system
-        // resize output image
     });
 }
 
@@ -228,9 +221,13 @@ impl UIMatrix {
     }
 }
 
-pub struct AppData {
+struct SingleImage {
     color_image: ColorImage,
     h3s: Vec<UIMatrix>,
+}
+
+pub struct AppData {
+    single_image: SingleImage,
     fill_canvas: bool,
     out_size_factor: f32,
 }
@@ -250,9 +247,13 @@ impl AppData {
 
         let h3s = vec![UIMatrix::new(); 10];
 
-        Self {
+        let single_image = SingleImage {
             color_image,
             h3s,
+        };
+
+        Self {
+            single_image,
             fill_canvas: true,
             out_size_factor: 1.0,
         }
@@ -265,7 +266,7 @@ impl AppData {
             .always_show_scroll(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui|{
-                    for (index, uimx) in self.h3s.iter_mut().enumerate() {
+                    for (index, uimx) in self.single_image.h3s.iter_mut().enumerate() {
                         display_h3(ui, uimx, index.try_into().unwrap());
                     }
                 });
@@ -275,7 +276,7 @@ impl AppData {
     fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let mut h = Projection::scale(1.0, 1.0);
 
-        for uimx in self.h3s.iter() {
+        for uimx in self.single_image.h3s.iter() {
             h = get_projection(&uimx) * h;
         }
 
@@ -286,18 +287,18 @@ impl AppData {
                 let out_w = ui.available_width() * self.out_size_factor;
                 let out_h = ui.available_height() * self.out_size_factor;
 
-                let tx = (out_w - self.color_image.size[0] as f32) / 2.0;
-                let ty = (out_h - self.color_image.size[1] as f32)/ 2.0;
+                let tx = (out_w - self.single_image.color_image.size[0] as f32) / 2.0;
+                let ty = (out_h - self.single_image.color_image.size[1] as f32)/ 2.0;
                 let translation = Projection::translate(tx, ty);
                 h = translation * h;
 
                 (out_w as u32, out_h as u32)
             } else {
-                (self.color_image.size[0] as u32, self.color_image.size[1] as u32)
+                (self.single_image.color_image.size[0] as u32, self.single_image.color_image.size[1] as u32)
             }
         };
 
-        let img = warp_image(out_w, out_h, &self.color_image, &h);
+        let img = warp_image(out_w, out_h, &self.single_image.color_image, &h);
         let out_size = egui::Vec2::new(out_w as f32 / self.out_size_factor, out_h as f32 / self.out_size_factor);
 
         let texture = ctx.load_texture(format!("img1"), img.clone(), egui::TextureFilter::Linear);
@@ -314,12 +315,6 @@ impl AppData {
 }
 
 impl eframe::App for AppData {
-    /*
-    fn name(&self) -> &str {
-        "Homography Playground"
-    }
-    */
-
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
@@ -332,3 +327,4 @@ impl eframe::App for AppData {
         //ctx.request_repaint(); // we want max framerate
     }
 }
+
