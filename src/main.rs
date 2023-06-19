@@ -8,7 +8,7 @@ fn main() {
 
     eframe::run_native("Homography Playground",
                         native_options,
-                        Box::new(|cc| Box::new(homography_playground::AppData::new())));
+                        Box::new(|_cc| Box::new(homography_playground::AppData::new())));
 }
 
 // web using trunk
@@ -21,6 +21,6 @@ fn main() {
 
     eframe::start_web("the_canvas_id", //hardcoded
                         web_options,
-                        Box::new(|cc| Box::new(homography_playground::AppData::new())));
+                        Box::new(|_cc| Box::new(homography_playground::AppData::new())));
 }
 
