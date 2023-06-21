@@ -34,6 +34,8 @@ Later, you can just use the files from `dist` directory.
 
 `python3 -m http.server 9000` and hit `127.0.0.1:9000`
 
+You won't be able to right click on the canvas.
+
 
 # Roadmap
 

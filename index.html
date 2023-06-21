@@ -39,7 +39,7 @@
             overflow: hidden;
             margin: 0 !important;
             padding: 0 !important;
-            height: 100%;
+            height: 95%;
             width: 100%;
         }
 
@@ -106,6 +106,44 @@
     <!-- the id is hardcoded in main.rs . so, make sure both match. -->
     <canvas id="the_canvas_id"></canvas>
 </body>
+
+<script>
+    var dropArea = document.getElementById("the_canvas_id");
+
+    // Prevent default drag behaviors
+    function preventDefaults(event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function (eventName) {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+    // Handle dropped files
+    function handleDrop(event) {
+            var files = event.dataTransfer.files;
+            for (var i = 0; i < files.length; i++) {
+                    console.log(files[i].name);
+
+                    // Read file content and convert to byte array
+                    var reader = new FileReader();
+
+                    reader.onload = function (event) {
+                            var arrayBuffer = event.target.result;
+                            var byteArray = new Uint8Array(arrayBuffer);
+
+                            // Use the byteArray here
+                            console.log(byteArray);
+                        };
+
+                    reader.readAsArrayBuffer(files[i]);
+                }
+        }
+
+    dropArea.addEventListener('drop', handleDrop, false);
+</script>
 
 </html>
 
