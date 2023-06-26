@@ -1,6 +1,7 @@
 use eframe::egui;
 use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
 use egui::ColorImage;
+use derivative::Derivative;
 
 fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) -> egui::ColorImage {
     // convert to image::Image
@@ -98,7 +99,8 @@ fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
     });
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(Derivative, Clone)]
+#[derivative(PartialEq)]
 enum Homography {
     I,
     R {
@@ -117,7 +119,15 @@ enum Homography {
         h31: f32,
         h32: f32,
         h33: f32
-    }
+    } ,
+    PPoints {
+        prev_points_dst: [(f32, f32); 4],
+        prev_points_src: [(f32, f32); 4],
+        new_points_src: [(f32, f32); 4],
+        new_points_dst: [(f32, f32); 4],
+        #[derivative(PartialEq = "ignore")]
+        proj: Option<Projection>,
+    },
 }
 
 fn get_projection(uimx: &UIMatrix) -> Projection {
@@ -130,7 +140,8 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         Homography::R{angle} => Projection::rotate(angle * 2.0 * 3.14 / 360.0 ),
         Homography::T{tx, ty} => Projection::translate(tx, ty),
         Homography::S{sx, sy, isotropic: _ } => Projection::scale(sx, sy),
-        Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, h31, h32, h33]).expect("non invertible")
+        Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, h31, h32, h33]).expect("non invertible"),
+        Homography::PPoints{prev_points_src : _, prev_points_dst : _, new_points_src : _, new_points_dst : _, proj} => proj.unwrap_or(Projection::scale(1.0, 1.0)),
     };
 
     if uimx.inverse {
@@ -182,6 +193,40 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.add(egui::Slider::new(h31, -0.01..=0.01));
                 ui.add(egui::Slider::new(h32, -0.01..=0.01));
                 ui.add(egui::Slider::new(h33, -5.0..=5.0));
+            },
+            Homography::PPoints { prev_points_src, prev_points_dst, new_points_src, new_points_dst, proj } => {
+                ui.label("Points");
+
+                ui.horizontal(|ui| {
+                    ui.label("src x");
+                    ui.label("src y");
+                    ui.label("dst x");
+                    ui.label("dst y");
+                });
+
+                for i in 0..=3 {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut new_points_src[i].0).speed(0.1));
+                        ui.add(egui::DragValue::new(&mut new_points_src[i].1).speed(0.1));
+                        ui.add(egui::DragValue::new(&mut new_points_dst[i].0).speed(0.1));
+                        ui.add(egui::DragValue::new(&mut new_points_dst[i].1).speed(0.1));
+                    });
+                }
+
+                if new_points_src != prev_points_src || new_points_dst != prev_points_dst {
+                    for i in 0..4 {
+                        prev_points_src[i] = new_points_src[i];
+                        prev_points_dst[i] = new_points_dst[i];
+                    }
+
+                    *proj = Projection::from_control_points(new_points_src.clone(), new_points_dst.clone());
+                }
+
+                if proj.is_some() {
+                    ui.label("Valid");
+                } else {
+                    ui.label("Invalid");
+                }
             }
         }
 
@@ -198,6 +243,15 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0, isotropic: false}, format!("Scale"));
                 ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
                 ui.selectable_value(h3, Homography::P{h31: 0.0, h32: 0.0, h33: 1.0}, format!("Proj"));
+                let points: [(f32, f32); 4]  = [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)];
+
+                ui.selectable_value(h3, Homography::PPoints{
+                    prev_points_src: points.clone(),
+                    prev_points_dst: points.clone(),
+                    new_points_src: points.clone(),
+                    new_points_dst: points.clone(),
+                    proj: Some(Projection::scale(1.0, 1.0)),
+                }, format!("Points"));
             });
 
         // anything can be R*S*T (just the 3)
@@ -205,7 +259,6 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
         // coordinate axes
         // local coordinate system
         // global coordinate system
-        // resize output image
     });
 }
 
@@ -314,12 +367,6 @@ impl AppData {
 }
 
 impl eframe::App for AppData {
-    /*
-    fn name(&self) -> &str {
-        "Homography Playground"
-    }
-    */
-
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
