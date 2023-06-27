@@ -227,7 +227,7 @@ struct SingleImage {
 }
 
 pub struct AppData {
-    single_image: SingleImage,
+    images: Vec<SingleImage>,
     fill_canvas: bool,
     out_size_factor: f32,
 }
@@ -247,16 +247,24 @@ impl AppData {
 
         let h3s = vec![UIMatrix::new(); 10];
 
-        let single_image = SingleImage {
+        let images = vec![SingleImage {
             color_image,
             h3s,
-        };
+        }];
 
         Self {
-            single_image,
+            images,
             fill_canvas: true,
             out_size_factor: 1.0,
         }
+    }
+
+    fn get_central_image_mut(&mut self) -> &mut SingleImage {
+        &mut self.images[0]
+    }
+
+    fn get_central_image(&self) -> &SingleImage {
+        &self.images[0]
     }
 
     fn display_homographies_panel(&mut self, ui: &mut egui::Ui) {
@@ -266,7 +274,7 @@ impl AppData {
             .always_show_scroll(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui|{
-                    for (index, uimx) in self.single_image.h3s.iter_mut().enumerate() {
+                    for (index, uimx) in self.get_central_image_mut().h3s.iter_mut().enumerate() {
                         display_h3(ui, uimx, index.try_into().unwrap());
                     }
                 });
@@ -276,7 +284,7 @@ impl AppData {
     fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let mut h = Projection::scale(1.0, 1.0);
 
-        for uimx in self.single_image.h3s.iter() {
+        for uimx in self.get_central_image().h3s.iter() {
             h = get_projection(&uimx) * h;
         }
 
@@ -287,18 +295,18 @@ impl AppData {
                 let out_w = ui.available_width() * self.out_size_factor;
                 let out_h = ui.available_height() * self.out_size_factor;
 
-                let tx = (out_w - self.single_image.color_image.size[0] as f32) / 2.0;
-                let ty = (out_h - self.single_image.color_image.size[1] as f32)/ 2.0;
+                let tx = (out_w - self.get_central_image().color_image.size[0] as f32) / 2.0;
+                let ty = (out_h - self.get_central_image().color_image.size[1] as f32)/ 2.0;
                 let translation = Projection::translate(tx, ty);
                 h = translation * h;
 
                 (out_w as u32, out_h as u32)
             } else {
-                (self.single_image.color_image.size[0] as u32, self.single_image.color_image.size[1] as u32)
+                (self.get_central_image().color_image.size[0] as u32, self.get_central_image().color_image.size[1] as u32)
             }
         };
 
-        let img = warp_image(out_w, out_h, &self.single_image.color_image, &h);
+        let img = warp_image(out_w, out_h, &self.get_central_image().color_image, &h);
         let out_size = egui::Vec2::new(out_w as f32 / self.out_size_factor, out_h as f32 / self.out_size_factor);
 
         let texture = ctx.load_texture(format!("img1"), img.clone(), egui::TextureFilter::Linear);
