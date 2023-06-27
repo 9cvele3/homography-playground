@@ -347,6 +347,9 @@ impl AppData {
         ui.image(&texture, out_size);
     }
 
+    fn display_images(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
+    }
+
     fn display_out_size_factor(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         ui.checkbox(&mut self.fill_canvas, "Fill canvas".to_string());
 
@@ -369,6 +372,7 @@ impl eframe::App for AppData {
             });
         });
 
+        // if cfg!
         //ctx.request_repaint(); // we want max framerate
     }
 }

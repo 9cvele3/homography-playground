@@ -8,7 +8,7 @@ fn main() {
 
     eframe::run_native("Homography Playground",
                         native_options,
-                        Box::new(|cc| Box::new(homography_playground::AppData::new())));
+                        Box::new(|_cc| Box::new(homography_playground::AppData::new())));
 }
 
 // web using trunk
