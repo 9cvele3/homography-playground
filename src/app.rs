@@ -259,6 +259,29 @@ impl AppData {
         }
     }
 
+    fn files_dropped(&mut self, files: &[egui::DroppedFile]) {
+        if !files.is_empty() {
+            let mut todo_files: Vec<_> = files.iter()
+                .filter_map(|f| f.clone().path)
+                .map(|f| f.to_path_buf())
+                .collect();
+
+            todo_files.sort();
+
+            for f in todo_files.iter() {
+                let color_image = load_image_from_path(&f).expect("Failed to load image");
+                let h3s = vec![UIMatrix::new(); 10];
+
+                let si = SingleImage {
+                    color_image,
+                    h3s
+                };
+
+                self.images.push(si);
+            }
+        }
+    }
+
     fn get_central_image_mut(&mut self) -> &mut SingleImage {
         &mut self.images[0]
     }
@@ -335,6 +358,8 @@ impl AppData {
 
 impl eframe::App for AppData {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.files_dropped(&ctx.input().raw.dropped_files[..]);
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
                 self.display_thumbs(ctx, ui);
