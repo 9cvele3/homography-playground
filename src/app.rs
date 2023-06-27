@@ -267,6 +267,17 @@ impl AppData {
         &self.images[0]
     }
 
+    fn display_thumbs(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            let out_size = egui::Vec2::new(100.0, 100.0);
+
+            for img in self.images.iter() {
+                let texture = ctx.load_texture(format!("thumb"), img.color_image.clone(), egui::TextureFilter::Linear);
+                ui.image(&texture, out_size);
+            }
+        });
+    }
+
     fn display_homographies_panel(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical()
             .hscroll(true)
@@ -326,6 +337,7 @@ impl eframe::App for AppData {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
+                self.display_thumbs(ctx, ui);
                 self.display_homographies_panel(ui);
                 self.display_out_size_factor(ctx, ui);
                 self.display_image(ctx, ui);
