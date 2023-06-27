@@ -38,5 +38,10 @@ Later, you can just use the files from `dist` directory.
 # Roadmap
 
 * Drag'n'Drop files in javascript
+* Support for multiple images
+* Support for image registration (Haar from imageproc, ranscac from nalgebra)
+* Support for registration based on points
+* Combo/list for available homographies
+* Save resulting image
 
 
