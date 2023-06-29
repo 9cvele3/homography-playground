@@ -199,13 +199,6 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
                 ui.selectable_value(h3, Homography::P{h31: 0.0, h32: 0.0, h33: 1.0}, format!("Proj"));
             });
-
-        // anything can be R*S*T (just the 3)
-        // projection
-        // coordinate axes
-        // local coordinate system
-        // global coordinate system
-        // resize output image
     });
 }
 
@@ -228,9 +221,14 @@ impl UIMatrix {
     }
 }
 
-pub struct AppData {
+struct SingleImage {
     color_image: ColorImage,
     h3s: Vec<UIMatrix>,
+}
+
+pub struct AppData {
+    images: Vec<SingleImage>,
+    central_index: usize,
     fill_canvas: bool,
     out_size_factor: f32,
 }
@@ -250,12 +248,66 @@ impl AppData {
 
         let h3s = vec![UIMatrix::new(); 10];
 
-        Self {
+        let images = vec![SingleImage {
             color_image,
             h3s,
+        }];
+
+        Self {
+            images,
+            central_index: 0,
             fill_canvas: true,
             out_size_factor: 1.0,
         }
+    }
+
+    fn files_dropped(&mut self, files: &[egui::DroppedFile]) {
+        if !files.is_empty() {
+            let mut todo_files: Vec<_> = files.iter()
+                .filter_map(|f| f.clone().path)
+                .map(|f| f.to_path_buf())
+                .collect();
+
+            todo_files.sort();
+
+            for f in todo_files.iter() {
+                if let Ok(color_image) = load_image_from_path(&f) {
+                    let h3s = vec![UIMatrix::new(); 10];
+
+                    let si = SingleImage {
+                        color_image,
+                        h3s
+                    };
+
+                    self.images.push(si);
+                }
+            }
+        }
+    }
+
+    fn get_central_image_mut(&mut self) -> &mut SingleImage {
+        &mut self.images[self.central_index]
+    }
+
+    fn get_central_image(&self) -> &SingleImage {
+        &self.images[self.central_index]
+    }
+
+    fn display_thumbs(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            let out_size = egui::Vec2::new(100.0, 100.0);
+
+            for (ind, img) in self.images.iter().enumerate() {
+                let texture = ctx.load_texture(format!("thumb"), img.color_image.clone(), egui::TextureFilter::Linear);
+                if ui.add(egui::ImageButton::new(&texture, out_size)).clicked() {
+                    self.central_index = ind;
+                }
+
+                //ui.image(&texture, out_size);
+            }
+
+            ui.label("Drag and drop images");
+        });
     }
 
     fn display_homographies_panel(&mut self, ui: &mut egui::Ui) {
@@ -265,7 +317,7 @@ impl AppData {
             .always_show_scroll(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui|{
-                    for (index, uimx) in self.h3s.iter_mut().enumerate() {
+                    for (index, uimx) in self.get_central_image_mut().h3s.iter_mut().enumerate() {
                         display_h3(ui, uimx, index.try_into().unwrap());
                     }
                 });
@@ -275,7 +327,7 @@ impl AppData {
     fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let mut h = Projection::scale(1.0, 1.0);
 
-        for uimx in self.h3s.iter() {
+        for uimx in self.get_central_image().h3s.iter() {
             h = get_projection(&uimx) * h;
         }
 
@@ -286,22 +338,25 @@ impl AppData {
                 let out_w = ui.available_width() * self.out_size_factor;
                 let out_h = ui.available_height() * self.out_size_factor;
 
-                let tx = (out_w - self.color_image.size[0] as f32) / 2.0;
-                let ty = (out_h - self.color_image.size[1] as f32)/ 2.0;
+                let tx = (out_w - self.get_central_image().color_image.size[0] as f32) / 2.0;
+                let ty = (out_h - self.get_central_image().color_image.size[1] as f32)/ 2.0;
                 let translation = Projection::translate(tx, ty);
                 h = translation * h;
 
                 (out_w as u32, out_h as u32)
             } else {
-                (self.color_image.size[0] as u32, self.color_image.size[1] as u32)
+                (self.get_central_image().color_image.size[0] as u32, self.get_central_image().color_image.size[1] as u32)
             }
         };
 
-        let img = warp_image(out_w, out_h, &self.color_image, &h);
+        let img = warp_image(out_w, out_h, &self.get_central_image().color_image, &h);
         let out_size = egui::Vec2::new(out_w as f32 / self.out_size_factor, out_h as f32 / self.out_size_factor);
 
         let texture = ctx.load_texture(format!("img1"), img.clone(), egui::TextureFilter::Linear);
         ui.image(&texture, out_size);
+    }
+
+    fn display_images(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
     }
 
     fn display_out_size_factor(&mut self, ui: &mut egui::Ui) {
@@ -314,21 +369,20 @@ impl AppData {
 }
 
 impl eframe::App for AppData {
-    /*
-    fn name(&self) -> &str {
-        "Homography Playground"
-    }
-    */
-
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.files_dropped(&ctx.input().raw.dropped_files[..]);
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
+                self.display_thumbs(ctx, ui);
                 self.display_homographies_panel(ui);
                 self.display_out_size_factor(ui);
                 self.display_image(ctx, ui);
             });
         });
 
+        // if cfg!
         //ctx.request_repaint(); // we want max framerate
     }
 }
+
