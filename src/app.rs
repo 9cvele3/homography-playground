@@ -2,7 +2,7 @@ use eframe::egui;
 use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
 use egui::ColorImage;
 
-fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) -> egui::ColorImage {
+fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection, alpha: u8) -> egui::ColorImage {
     // convert to image::Image
     let size = im.size;
     let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
@@ -10,7 +10,7 @@ fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) ->
         pixels.push(pix.r());
         pixels.push(pix.g());
         pixels.push(pix.b());
-        pixels.push(pix.a());
+        pixels.push(alpha);
     }
 
     let tmp_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> =
@@ -21,7 +21,7 @@ fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection) ->
     let mut new_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> =
         image::ImageBuffer::new(out_w, out_h);
 
-    warp_into(&tmp_img, h3, Interpolation::Bilinear, [255, 0, 255, 117].into(), &mut new_img);
+    warp_into(&tmp_img, h3, Interpolation::Bilinear, [255, 0, 255, alpha].into(), &mut new_img);
 
     // convert back to egui::ColorImage
     let pixels = new_img.as_raw()
@@ -223,6 +223,7 @@ impl UIMatrix {
 
 struct SingleImage {
     color_image: ColorImage,
+    alpha: u8,
     h3s: Vec<UIMatrix>,
 }
 
@@ -231,6 +232,7 @@ pub struct AppData {
     central_index: usize,
     fill_canvas: bool,
     out_size_factor: f32,
+    blend_all: bool,
 }
 
 impl AppData {
@@ -250,6 +252,7 @@ impl AppData {
 
         let images = vec![SingleImage {
             color_image,
+            alpha: 255,
             h3s,
         }];
 
@@ -258,6 +261,7 @@ impl AppData {
             central_index: 0,
             fill_canvas: true,
             out_size_factor: 1.0,
+            blend_all: false,
         }
     }
 
@@ -276,7 +280,8 @@ impl AppData {
 
                     let si = SingleImage {
                         color_image,
-                        h3s
+                        alpha: 255,
+                        h3s,
                     };
 
                     self.images.push(si);
@@ -295,15 +300,20 @@ impl AppData {
 
     fn display_thumbs(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            let out_size = egui::Vec2::new(100.0, 100.0);
+            let out_size = egui::Vec2::new(140.0, 140.0);
 
-            for (ind, img) in self.images.iter().enumerate() {
+            for (ind, img) in self.images.iter_mut().enumerate() {
                 let texture = ctx.load_texture(format!("thumb"), img.color_image.clone(), egui::TextureFilter::Linear);
-                if ui.add(egui::ImageButton::new(&texture, out_size)).clicked() {
-                    self.central_index = ind;
-                }
 
-                //ui.image(&texture, out_size);
+                ui.vertical(|ui| {
+                    if ui.add(egui::ImageButton::new(&texture, out_size)).clicked() {
+                        self.central_index = ind;
+                    }
+
+                    //ui.image(&texture, out_size);
+                    //ui.add(egui::DragValue::new(&mut img.alpha).speed(1));
+                    ui.add(egui::Slider::new(&mut img.alpha, 0..=255));
+                });
             }
 
             ui.label("Drag and drop images");
@@ -315,6 +325,7 @@ impl AppData {
             .hscroll(true)
             .vscroll(false)
             .always_show_scroll(true)
+            .auto_shrink([false, true])
             .show(ui, |ui| {
                 ui.horizontal(|ui|{
                     for (index, uimx) in self.get_central_image_mut().h3s.iter_mut().enumerate() {
@@ -324,19 +335,19 @@ impl AppData {
             });
     }
 
-    fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
+    fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui, single_image: &SingleImage, available_width: f32, available_height: f32, texid: String, rect: &mut Option<egui::Rect>) {
         let mut h = Projection::scale(1.0, 1.0);
 
-        for uimx in self.get_central_image().h3s.iter() {
+        for uimx in single_image.h3s.iter() {
             h = get_projection(&uimx) * h;
         }
 
-        display_homography(ui, &h);
+        //display_homography(ui, &h);
 
         let (out_w, out_h) = {
             if self.fill_canvas {
-                let out_w = ui.available_width() * self.out_size_factor;
-                let out_h = ui.available_height() * self.out_size_factor;
+                let out_w = available_width * self.out_size_factor;
+                let out_h = available_height * self.out_size_factor;
 
                 let tx = (out_w - self.get_central_image().color_image.size[0] as f32) / 2.0;
                 let ty = (out_h - self.get_central_image().color_image.size[1] as f32)/ 2.0;
@@ -349,14 +360,31 @@ impl AppData {
             }
         };
 
-        let img = warp_image(out_w, out_h, &self.get_central_image().color_image, &h);
+        let img = warp_image(out_w, out_h, &single_image.color_image, &h, single_image.alpha);
         let out_size = egui::Vec2::new(out_w as f32 / self.out_size_factor, out_h as f32 / self.out_size_factor);
 
-        let texture = ctx.load_texture(format!("img1"), img.clone(), egui::TextureFilter::Linear);
-        ui.image(&texture, out_size);
+        let texture = ctx.load_texture(texid, img.clone(), egui::TextureFilter::Linear);
+
+        if let Some(rect) = rect {
+            let imgw = egui::Image::new(&texture, out_size);
+            ui.put(*rect, imgw);
+        } else {
+            *rect = Some(ui.image(&texture, out_size).rect);
+        }
     }
 
     fn display_images(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        let available_width = ui.available_width();
+        let available_height = ui.available_height();
+        let mut rect = None;
+
+        if self.blend_all {
+            for (ind, si) in self.images.iter().enumerate() {
+                self.display_image(ctx, ui, si, available_width, available_height, format!("dddimg{}", ind), &mut rect);
+            }
+        } else {
+            self.display_image(ctx, ui, self.get_central_image(), available_width, available_height, format!("daimg0"), &mut rect);
+        }
     }
 
     fn display_out_size_factor(&mut self, ui: &mut egui::Ui) {
@@ -365,6 +393,8 @@ impl AppData {
         if self.fill_canvas {
             ui.add(egui::Slider::new(&mut self.out_size_factor, 0.5..=1.0).text("out size factor (change if slow performance)"));
         }
+
+        ui.checkbox(&mut self.blend_all, "Blend all".to_string());
     }
 }
 
@@ -377,7 +407,7 @@ impl eframe::App for AppData {
                 self.display_thumbs(ctx, ui);
                 self.display_homographies_panel(ui);
                 self.display_out_size_factor(ui);
-                self.display_image(ctx, ui);
+                self.display_images(ctx, ui);
             });
         });
 
