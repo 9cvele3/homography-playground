@@ -228,6 +228,7 @@ struct SingleImage {
 
 pub struct AppData {
     images: Vec<SingleImage>,
+    central_index: usize,
     fill_canvas: bool,
     out_size_factor: f32,
 }
@@ -254,6 +255,7 @@ impl AppData {
 
         Self {
             images,
+            central_index: 0,
             fill_canvas: true,
             out_size_factor: 1.0,
         }
@@ -269,35 +271,42 @@ impl AppData {
             todo_files.sort();
 
             for f in todo_files.iter() {
-                let color_image = load_image_from_path(&f).expect("Failed to load image");
-                let h3s = vec![UIMatrix::new(); 10];
+                if let Ok(color_image) = load_image_from_path(&f) {
+                    let h3s = vec![UIMatrix::new(); 10];
 
-                let si = SingleImage {
-                    color_image,
-                    h3s
-                };
+                    let si = SingleImage {
+                        color_image,
+                        h3s
+                    };
 
-                self.images.push(si);
+                    self.images.push(si);
+                }
             }
         }
     }
 
     fn get_central_image_mut(&mut self) -> &mut SingleImage {
-        &mut self.images[0]
+        &mut self.images[self.central_index]
     }
 
     fn get_central_image(&self) -> &SingleImage {
-        &self.images[0]
+        &self.images[self.central_index]
     }
 
-    fn display_thumbs(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
+    fn display_thumbs(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let out_size = egui::Vec2::new(100.0, 100.0);
 
-            for img in self.images.iter() {
+            for (ind, img) in self.images.iter().enumerate() {
                 let texture = ctx.load_texture(format!("thumb"), img.color_image.clone(), egui::TextureFilter::Linear);
-                ui.image(&texture, out_size);
+                if ui.add(egui::ImageButton::new(&texture, out_size)).clicked() {
+                    self.central_index = ind;
+                }
+
+                //ui.image(&texture, out_size);
             }
+
+            ui.label("Drag and drop images");
         });
     }
 
