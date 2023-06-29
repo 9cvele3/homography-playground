@@ -129,7 +129,7 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         Homography::I => { Projection::scale(1.0, 1.0) },
         Homography::R{angle} => Projection::rotate(angle * 2.0 * 3.14 / 360.0 ),
         Homography::T{tx, ty} => Projection::translate(tx, ty),
-        Homography::S{sx, sy, isotropic} => Projection::scale(sx, sy),
+        Homography::S{sx, sy, isotropic: _ } => Projection::scale(sx, sy),
         Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, h31, h32, h33]).expect("non invertible")
     };
 
@@ -359,7 +359,7 @@ impl AppData {
     fn display_images(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
     }
 
-    fn display_out_size_factor(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+    fn display_out_size_factor(&mut self, ui: &mut egui::Ui) {
         ui.checkbox(&mut self.fill_canvas, "Fill canvas".to_string());
 
         if self.fill_canvas {
@@ -376,7 +376,7 @@ impl eframe::App for AppData {
             ui.vertical(|ui|{
                 self.display_thumbs(ctx, ui);
                 self.display_homographies_panel(ui);
-                self.display_out_size_factor(ctx, ui);
+                self.display_out_size_factor(ui);
                 self.display_image(ctx, ui);
             });
         });
