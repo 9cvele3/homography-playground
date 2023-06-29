@@ -325,6 +325,7 @@ impl AppData {
             .hscroll(true)
             .vscroll(false)
             .always_show_scroll(true)
+            .auto_shrink([false, true])
             .show(ui, |ui| {
                 ui.horizontal(|ui|{
                     for (index, uimx) in self.get_central_image_mut().h3s.iter_mut().enumerate() {
