@@ -120,11 +120,15 @@ enum Homography {
         h32: f32,
         h33: f32
     } ,
-    PPoints {
+    Points {
         prev_points_dst: [(f32, f32); 4],
         prev_points_src: [(f32, f32); 4],
         new_points_src: [(f32, f32); 4],
         new_points_dst: [(f32, f32); 4],
+        #[derivative(PartialEq = "ignore")]
+        proj: Option<Projection>,
+    },
+    Reg {
         #[derivative(PartialEq = "ignore")]
         proj: Option<Projection>,
     },
@@ -141,7 +145,8 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         Homography::T{tx, ty} => Projection::translate(tx, ty),
         Homography::S{sx, sy, isotropic: _ } => Projection::scale(sx, sy),
         Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, h31, h32, h33]).expect("non invertible"),
-        Homography::PPoints{prev_points_src : _, prev_points_dst : _, new_points_src : _, new_points_dst : _, proj} => proj.unwrap_or(Projection::scale(1.0, 1.0)),
+        Homography::Points{prev_points_src : _, prev_points_dst : _, new_points_src : _, new_points_dst : _, proj} => proj.unwrap_or(Projection::scale(1.0, 1.0)),
+        Homography::Reg{ proj } => proj.unwrap_or(Projection::scale(1.0, 1.0)),
     };
 
     if uimx.inverse {
@@ -194,7 +199,8 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.add(egui::Slider::new(h32, -0.01..=0.01));
                 ui.add(egui::Slider::new(h33, -5.0..=5.0));
             },
-            Homography::PPoints { prev_points_src, prev_points_dst, new_points_src, new_points_dst, proj } => {
+            Homography::Points { prev_points_src, prev_points_dst, new_points_src, new_points_dst, proj } => {
+                selected_text = "Points";
                 ui.label("Points");
 
                 ui.horizontal(|ui| {
@@ -227,7 +233,11 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 } else {
                     ui.label("Invalid");
                 }
-            }
+            },
+            Homography::Reg {proj} => {
+                selected_text = "Reg";
+                ui.label("Reg");
+            },
         }
 
         ui.checkbox(&mut uimx.on, "on/off".to_string());
@@ -245,13 +255,15 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.selectable_value(h3, Homography::P{h31: 0.0, h32: 0.0, h33: 1.0}, format!("Proj"));
                 let points: [(f32, f32); 4]  = [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)];
 
-                ui.selectable_value(h3, Homography::PPoints{
+                ui.selectable_value(h3, Homography::Points{
                     prev_points_src: points.clone(),
                     prev_points_dst: points.clone(),
                     new_points_src: points.clone(),
                     new_points_dst: points.clone(),
                     proj: Some(Projection::scale(1.0, 1.0)),
                 }, format!("Points"));
+
+                ui.selectable_value(h3, Homography::Reg { proj: None }, format!("Reg"));
             });
     });
 }
