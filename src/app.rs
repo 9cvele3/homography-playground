@@ -3,6 +3,24 @@ use imageproc::geometric_transformations::{Projection, warp_into, Interpolation}
 use egui::ColorImage;
 use derivative::Derivative;
 
+fn save_image(im: &egui::ColorImage, path: &str) {
+    let size = im.size;
+    let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
+
+    for pix in im.pixels.iter() {
+        pixels.push(pix.r());
+        pixels.push(pix.g());
+        pixels.push(pix.b());
+        pixels.push(pix.a());
+    }
+
+    let img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> =
+        image::ImageBuffer::from_raw(size[0] as u32, size[1] as u32, pixels)
+        .expect("bad conversion");
+
+    img.save(path).expect("Failed to save");
+}
+
 fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection, alpha: u8) -> egui::ColorImage {
     // convert to image::Image
     let size = im.size;
@@ -299,6 +317,7 @@ pub struct AppData {
     fill_canvas: bool,
     out_size_factor: f32,
     blend_all: bool,
+    save_path: Option<String>,
 }
 
 impl AppData {
@@ -328,6 +347,7 @@ impl AppData {
             fill_canvas: true,
             out_size_factor: 1.0,
             blend_all: false,
+            save_path: None,
         }
     }
 
@@ -427,6 +447,11 @@ impl AppData {
         };
 
         let img = warp_image(out_w, out_h, &single_image.color_image, &h, single_image.alpha);
+
+        if let Some(file_path) = &self.save_path {
+            save_image(&img, &file_path);
+        }
+
         let out_size = egui::Vec2::new(out_w as f32 / self.out_size_factor, out_h as f32 / self.out_size_factor);
 
         let texture = ctx.load_texture(texid, img.clone(), egui::TextureFilter::Linear);
@@ -439,18 +464,21 @@ impl AppData {
         }
     }
 
-    fn display_images(&self, ctx: &egui::Context, ui: &mut egui::Ui) {
+    fn display_images(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         let available_width = ui.available_width();
         let available_height = ui.available_height();
         let mut rect = None;
 
         if self.blend_all {
             for (ind, si) in self.images.iter().enumerate() {
+                self.save_path = None;
                 self.display_image(ctx, ui, si, available_width, available_height, format!("dddimg{}", ind), &mut rect);
             }
         } else {
             self.display_image(ctx, ui, self.get_central_image(), available_width, available_height, format!("daimg0"), &mut rect);
         }
+
+        self.save_path = None;
     }
 
     fn display_out_size_factor(&mut self, ui: &mut egui::Ui) {
@@ -461,6 +489,12 @@ impl AppData {
         }
 
         ui.checkbox(&mut self.blend_all, "Blend all".to_string());
+
+        if !self.blend_all {
+            if ui.button("Save").clicked() {
+                self.save_path = tinyfiledialogs::save_file_dialog("Save File", "");
+            }
+        }
     }
 }
 
