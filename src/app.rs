@@ -3,6 +3,7 @@ use imageproc::geometric_transformations::{Projection, warp_into, Interpolation}
 use egui::ColorImage;
 use derivative::Derivative;
 
+
 fn save_image(im: &egui::ColorImage, path: &str) {
     let size = im.size;
     let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
@@ -46,10 +47,16 @@ fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection, al
     let pixels = new_img.as_raw()
         .chunks_exact(4)
         .map(|p| {
+            let alpha = if p[0] == 255 && p[1] == 0 && p[2] == 255 {
+                0
+            } else {
+                p[3]
+            };
+
             let lr = p[0];
             let lg = p[1];
             let lb = p[2];
-            let la = p[3];
+            let la = alpha;
             egui::Color32::from_rgba_unmultiplied(lr, lg, lb, la)
         })
     .collect();
@@ -206,8 +213,8 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 selected_text = "Trans";
 
                 ui.label("Trans");
-                ui.add(egui::Slider::new(tx, -1000.0..=1000.0));
-                ui.add(egui::Slider::new(ty, -1000.0..=1000.0));
+                ui.add(egui::Slider::new(tx, -2000.0..=2000.0));
+                ui.add(egui::Slider::new(ty, -2000.0..=2000.0));
             },
             Homography::P { h31, h32, h33 } => {
                 selected_text = "Proj";
