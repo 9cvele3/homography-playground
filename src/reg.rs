@@ -9,13 +9,12 @@ use nalgebra::{SMatrix, DVector, SVector, DMatrix, Matrix};
 #[test]
 fn test_ecc() {
     let img1 = image::open("img/lena-gray.png").expect("File not found!").grayscale().into_luma8();
-    let img2 = image::open("img/lena-trans.png").expect("File not found!").grayscale().into_luma8();
+    let img2 = image::open("img/lena-trans-10.png").expect("File not found!").grayscale().into_luma8();
 
     let proj = ecc(&img1, &img2).expect("Registration failed");
-
 }
 
-const K: usize = 500;
+const K: usize = 1000;
 const N: usize = 9;
 type Jacobian = DMatrix::<f32>;//Matrix::<f32, nalgebra::Const<K>, nalgebra::Const<N>, nalgebra::RawStorage<f32, nalgebra::Const<K>, nalgebra::Const<N>>>;
 type Params = DVector::<f32>;//Matrix::<f32, nalgebra::Const<N>, nalgebra::U1, nalgebra::ArrayStorage<f32, N, 1>>;
@@ -43,6 +42,14 @@ fn get_feature_vector(im: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, coords:
     fv
 }
 
+fn draw_points(img: &mut image::ImageBuffer<image::Luma<u8>, Vec<u8>>, X: &Vec<(u32, u32)>, P: &Params) {
+    for (x0, x1) in X.iter() {
+//        println!("{} {}", x0, x1);
+        let (y0, y1) = warp_coords(P, (*x0, *x1));
+        img.get_pixel_mut(y0, y1).0[0] = 255;
+    }
+}
+
 #[allow(non_snake_case)]
 fn ecc(Ir: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, Iw: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>) -> Option<Projection> {
     let X = get_k_points(K, Ir.width(), Ir.height());
@@ -54,43 +61,53 @@ fn ecc(Ir: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, Iw: &image::ImageBuffe
     let ir = get_feature_vector(Ir, &X, true);
 
     loop {
+        println!("iteration {}", num_iter);
+
         // warp into
         let mut Imgw: image::ImageBuffer<image::Luma<u8>, Vec<_>> = image::ImageBuffer::new(Ir.width(), Ir.height());
         let h3 = Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8]]).expect("Invalid homography");
         warp_into(&Iw, &h3, Interpolation::Bilinear, [0].into(), &mut Imgw);
+        //draw_points(&mut Imgw, &X, &P);
         Imgw.save(format!("img/iter{}.png", num_iter));
         let iw = get_feature_vector(&Imgw, &X, false);
+
+        // ecc_coef is in range [0, 1];
+        let ecc_coeff = (ir.transpose() * iw.clone() / iw.norm())[(0, 0)];
+        println!("ecc_coeff {}", ecc_coeff);
 
 
         let G = calculate_jacobian(&Imgw, &X, &P);
         let GT = G.transpose();
         let GT_G = GT.mul(&G);
         let GT_G_inv_GT = (GT_G).pseudo_inverse(0.00000001).unwrap() * G.transpose();
-        let PG = G * GT_G_inv_GT.clone();
+        let PG = G.clone() * GT_G_inv_GT.clone();
 
         let ir_iw = (ir.transpose() * iw.clone())[(0, 0)];
         let ir_pg_iw = (ir.transpose() * PG.clone() * iw.clone())[(0, 0)];
         let iw_pg_iw = (iw.transpose() * PG.clone() * iw.clone())[(0, 0)];
 
         let inc = if ir_iw > ir_pg_iw {
-            println!("inc1");
+            println!("inc1, {} > {}", ir_iw, ir_pg_iw);
             increment1(&ir, &iw, &GT_G_inv_GT, ir_iw, ir_pg_iw, iw_pg_iw)
         } else {
-            println!("inc2");
+            println!("inc2, {} <= {}", ir_iw, ir_pg_iw);
             let ir_pg_ir = (ir.transpose() * PG * ir.clone())[(0, 0)];
             increment2(&ir, &iw, &GT_G_inv_GT, ir_iw, iw_pg_iw, ir_pg_ir, ir_pg_iw)
         };
 
         println!("inc.norm {}", inc.norm());
         //println!("inc: {} {} {} \n {} {} {} \n {} {} {}", inc[0], inc[1], inc[2], inc[3], inc[4], inc[5], inc[6], inc[7], inc[8]);
-
+        let ecc_coeff_approximaiton = (ir.transpose() * (iw.clone() + G.clone() * inc.clone()) / (iw.clone() + G.clone()*inc.clone()).norm())[(0, 0)];
+        println!("ecc_coeff_approximation: {}", ecc_coeff_approximaiton);
 
         if inc.norm() < threshold {
             return Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8]]);
         } else if num_iter < max_num_iter {
-            P += inc;
+            for i in 0..inc.len() {
+                P[i] -= inc[i];
+            }
             let proj =  Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8]]);
-            //println!("proj: {:?}", proj);
+            println!("proj: {:?}", proj);
             num_iter += 1;
         } else {
             break;
@@ -101,18 +118,16 @@ fn ecc(Ir: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, Iw: &image::ImageBuffe
 }
 
 fn get_k_points(k: usize, w: u32, h: u32) -> Vec<(u32, u32)> {
-    let mut y = 10;
+    let inc = (((w - 10) * (h - 10)) as f32/ k as f32) as u32;
+
+    let mut ind = 10;
     let mut res = vec![];
 
-    while y < h {
-        let mut x = 10;
-
-        while x < w {
-            res.push((x, y));
-            x += 50;
-        }
-
-        y += 50;
+    while ind < w * h && res.len() < k {
+        let x = ind % w;
+        let y = ind / h;
+        res.push((x, y));
+        ind += inc;
     }
 
     res
