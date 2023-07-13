@@ -15,7 +15,7 @@ fn test_ecc() {
 }
 
 const K: usize = 1000;
-const N: usize = 9;
+const N: usize = 8;
 type Jacobian = DMatrix::<f32>;//Matrix::<f32, nalgebra::Const<K>, nalgebra::Const<N>, nalgebra::RawStorage<f32, nalgebra::Const<K>, nalgebra::Const<N>>>;
 type Params = DVector::<f32>;//Matrix::<f32, nalgebra::Const<N>, nalgebra::U1, nalgebra::ArrayStorage<f32, N, 1>>;
 type FeatureVector = DVector::<f32>;//SVector::<f32, K>;
@@ -65,7 +65,7 @@ fn ecc(Ir: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, Iw: &image::ImageBuffe
 
         // warp into
         let mut Imgw: image::ImageBuffer<image::Luma<u8>, Vec<_>> = image::ImageBuffer::new(Ir.width(), Ir.height());
-        let h3 = Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8]]).expect("Invalid homography");
+        let h3 = Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], 1.0]).expect("Invalid homography");
         warp_into(&Iw, &h3, Interpolation::Bilinear, [0].into(), &mut Imgw);
         //draw_points(&mut Imgw, &X, &P);
         Imgw.save(format!("img/iter{}.png", num_iter));
@@ -74,7 +74,6 @@ fn ecc(Ir: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, Iw: &image::ImageBuffe
         // ecc_coef is in range [0, 1];
         let ecc_coeff = (ir.transpose() * iw.clone() / iw.norm())[(0, 0)];
         println!("ecc_coeff {}", ecc_coeff);
-
 
         let G = calculate_jacobian(&Imgw, &X, &P);
         let GT = G.transpose();
@@ -96,18 +95,18 @@ fn ecc(Ir: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, Iw: &image::ImageBuffe
         };
 
         println!("inc.norm {}", inc.norm());
-        //println!("inc: {} {} {} \n {} {} {} \n {} {} {}", inc[0], inc[1], inc[2], inc[3], inc[4], inc[5], inc[6], inc[7], inc[8]);
+        println!("inc: {} {} {} \n {} {} {} \n {} {}", inc[0], inc[1], inc[2], inc[3], inc[4], inc[5], inc[6], inc[7]);
         let ecc_coeff_approximaiton = (ir.transpose() * (iw.clone() + G.clone() * inc.clone()) / (iw.clone() + G.clone()*inc.clone()).norm())[(0, 0)];
         println!("ecc_coeff_approximation: {}", ecc_coeff_approximaiton);
 
         if inc.norm() < threshold {
-            return Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8]]);
+            return Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], 1.0]);
         } else if num_iter < max_num_iter {
             for i in 0..inc.len() {
-                P[i] -= inc[i];
+                P[i] += inc[i];
             }
-            let proj =  Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8]]);
-            println!("proj: {:?}", proj);
+            let proj =  Projection::from_matrix([P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], 1.0]);
+        //    println!("proj: {:?}", proj);
             num_iter += 1;
         } else {
             break;
@@ -136,7 +135,7 @@ fn get_k_points(k: usize, w: u32, h: u32) -> Vec<(u32, u32)> {
 fn warp_coords(P: &Params, X: (u32, u32)) -> (u32, u32) {
     let y1 = P[0] * (X.0 as f32) + P[1] * (X.1 as f32) + P[2];
     let y2 = P[3] * (X.0 as f32) + P[4] * (X.1 as f32) + P[5];
-    let den = P[6] * (X.0 as f32) + P[7] * (X.1 as f32) + P[8];
+    let den = P[6] * (X.0 as f32) + P[7] * (X.1 as f32) + 1.0;
 
     ((0.5 + y1 / den) as u32, (0.5 + y2 / den) as u32)
 }
@@ -158,15 +157,15 @@ fn calculate_jacobian(Iw: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, X: &Vec
 /*
         p0  p1  p2      x0      p0x0+p1x1+p2
         p3  p4  p5  *   x1  =   p3x0+p4x1+p5
-        p6  p7  p8      1       p6x0+p7x1+p8
+        p6  p7  1      1        p6x0+p7x1+1
 
-        phi1 = (p0x0 + p1x1 + p2) / (p6x0 + p7x1 + p8)
-        phi2 = (p3x0 + p4x1 + p5) / (p6x0 + p7x1 + p8)
+        phi1 = (p0x0 + p1x1 + p2) / (p6x0 + p7x1 + 1)
+        phi2 = (p3x0 + p4x1 + p5) / (p6x0 + p7x1 + 1)
 */
 
         let numerator1 = P[0] * (*x0 as f32) + P[1] * (*x1 as f32) + P[2];
         let numerator2 = P[3] * (*x0 as f32) + P[4] * (*x1 as f32) + P[5];
-        let denominator = P[6] * (*x0 as f32) + P[7] * (*x1 as f32) + P[8];
+        let denominator = P[6] * (*x0 as f32) + P[7] * (*x1 as f32) + 1.0;
 
         // N = 0
         {
@@ -225,12 +224,14 @@ fn calculate_jacobian(Iw: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, X: &Vec
             G[(k, 7)] = el;
         }
         // N = 8
+        /*
         {
             let dphi_ofx1_per_dp8 = - numerator1 * 1.0 / (denominator * denominator);
             let dphi_ofx2_per_dp8 = - numerator2 * 1.0 / (denominator * denominator);
             let el = dI_per_dy1 * dphi_ofx1_per_dp8 + dI_per_dy2 * dphi_ofx2_per_dp8;
             G[(k, 8)] = el;
         }
+        */
     } // for
 
     // zero mean G over columns
@@ -249,14 +250,14 @@ fn calculate_jacobian(Iw: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, X: &Vec
 
 #[allow(non_snake_case)]
 fn increment1(ir: &FeatureVector, iw: &FeatureVector, GT_G_inv_GT: &DMatrix::<f32>, ir_iw: f32, ir_pg_iw: f32, iw_pg_iw: f32) -> Params {
-    GT_G_inv_GT * (((iw.norm() * iw.norm() - iw_pg_iw) / (0.00000000001 + ir_iw - ir_pg_iw))* ir - iw)
+    GT_G_inv_GT * (((iw.norm() * iw.norm() - iw_pg_iw) / (ir_iw - ir_pg_iw))* ir - iw)
 }
 
 #[allow(non_snake_case)]
 fn increment2(ir: &FeatureVector, iw: &FeatureVector, GT_G_inv_GT: &DMatrix::<f32>, ir_iw: f32, iw_pg_iw: f32, ir_pg_ir: f32, ir_pg_iw: f32) -> Params {
-    let ir_pg_ir = 0.000000001 + ir_pg_ir;
+    let ir_pg_ir = ir_pg_ir;
     let lambda1 = (iw_pg_iw / ir_pg_ir).sqrt();
-    let lambda2 = ir_pg_iw - ir_iw / ir_pg_ir;
+    let lambda2 = (ir_pg_iw - ir_iw) / ir_pg_ir;
 
     let lambda = lambda1.max(lambda2);
     GT_G_inv_GT * (lambda * ir - iw)
