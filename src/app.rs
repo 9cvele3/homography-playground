@@ -1,30 +1,42 @@
 use eframe::egui;
 use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
 use egui::ColorImage;
+use puffin_egui::puffin;
 
 fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection, alpha: u8) -> egui::ColorImage {
-    // convert to image::Image
-    let size = im.size;
-    let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
-    for pix in im.pixels.iter() {
-        pixels.push(pix.r());
-        pixels.push(pix.g());
-        pixels.push(pix.b());
-        pixels.push(alpha);
-    }
+    puffin::profile_function!();
 
-    let tmp_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> =
+    // convert to image::Image
+    let tmp_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> = {
+        puffin::profile_scope!("to_image::Image", "convert");
+
+        let size = im.size;
+        let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
+        for pix in im.pixels.iter() {
+            pixels.push(pix.r());
+            pixels.push(pix.g());
+            pixels.push(pix.b());
+            pixels.push(alpha);
+        }
+
         image::ImageBuffer::from_raw(size[0] as u32, size[1] as u32, pixels)
-        .expect("bad conversion");
+        .expect("bad conversion")
+    };
 
     let out_size: [usize; 2] = [out_w as usize, out_h as usize];
-    let mut new_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> =
-        image::ImageBuffer::new(out_w, out_h);
+    let new_img: image::ImageBuffer<image::Rgba<u8>, Vec<_>> = {
+        puffin::profile_scope!("warp_into", "warp_into");
+        let mut new_img = image::ImageBuffer::new(out_w, out_h);
 
-    warp_into(&tmp_img, h3, Interpolation::Bilinear, [255, 0, 255, alpha].into(), &mut new_img);
+        warp_into(&tmp_img, h3, Interpolation::Bilinear, [255, 0, 255, alpha].into(), &mut new_img);
+        new_img
+    };
 
     // convert back to egui::ColorImage
-    let pixels = new_img.as_raw()
+    let color_image = {
+        puffin::profile_scope!("to_egui", "convert");
+
+        let pixels = new_img.as_raw()
         .chunks_exact(4)
         .map(|p| {
             let lr = p[0];
@@ -33,9 +45,12 @@ fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection, al
             let la = p[3];
             egui::Color32::from_rgba_unmultiplied(lr, lg, lb, la)
         })
-    .collect();
+        .collect();
 
-    egui::ColorImage{size: out_size, pixels}
+        egui::ColorImage{size: out_size, pixels}
+    };
+
+    color_image
 }
 
 fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, image::ImageError> {
@@ -233,6 +248,7 @@ pub struct AppData {
     fill_canvas: bool,
     out_size_factor: f32,
     blend_all: bool,
+    use_puffin_profiler: bool,
 }
 
 impl AppData {
@@ -256,12 +272,16 @@ impl AppData {
             h3s,
         }];
 
+        let use_puffin_profiler = std::env::var("USE_PUFFIN")
+                                    .map(|s| s.trim().parse::<bool>().unwrap_or(false))
+                                    .unwrap_or(false);
         Self {
             images,
             central_index: 0,
             fill_canvas: true,
             out_size_factor: 1.0,
             blend_all: false,
+            use_puffin_profiler,
         }
     }
 
@@ -400,6 +420,12 @@ impl AppData {
 
 impl eframe::App for AppData {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.use_puffin_profiler {
+            puffin::profile_function!();
+            puffin::GlobalProfiler::lock().new_frame(); // call once per frame!
+            puffin_egui::profiler_window(ctx);
+        }
+
         self.files_dropped(&ctx.input().raw.dropped_files[..]);
 
         egui::CentralPanel::default().show(ctx, |ui| {
