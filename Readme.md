@@ -40,3 +40,9 @@ Later, you can just use the files from `dist` directory.
 * Drag'n'Drop files in javascript
 
 
+```rustup default nightly```
+
+```rustup default stable```
+
+
+bench - at the root of the project

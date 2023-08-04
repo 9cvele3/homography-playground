@@ -71,6 +71,12 @@ fn convert_luma_u8_to_luma_f32(img: &image::ImageBuffer<image::Luma<u8>, Vec<u8>
 
 #[test]
 fn test_ecc() {
+    test_ecc_impl();
+}
+
+pub fn test_ecc_impl() {
+    use crate::reg::ecc;
+
     let paths = std::fs::read_dir("./img/").unwrap();
 
     for p in paths {
@@ -98,7 +104,7 @@ fn test_ecc() {
 }
 
 fn get_feature_vector(im: &ImgBuffer, coords: &Vec<(u32, u32)>, normalize: bool) -> FeatureVector {
-    let mut fv = FeatureVector::zeros(K);
+    let mut fv = FeatureVector::zeros(coords.len());
 
     for (i, (x, y)) in coords.iter().enumerate() {
         let pixel = get_pixel_value(im, *x, *y);
@@ -130,8 +136,11 @@ fn draw_points(img: &mut image::ImageBuffer<image::Luma<u8>, Vec<u8>>, X: &Vec<(
 
 #[allow(non_snake_case)]
 fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
+    let mut w = std::fs::File::create("/tmp/ecc.log").unwrap();
+    use std::io::Write;
+
     let mut num_points = K;
-    let mut border = 100;
+    let mut border = 40;
     let mut X = get_k_points(num_points, Ir.width(), Ir.height(), false, border);
     let mut ir = get_feature_vector(Ir, &X, true);
 
@@ -141,7 +150,7 @@ fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
     let threshold = 0.0001;
     let max_num_iter = 50;
     let mut num_iter = 0;
-    let mut dump_factor = 1.0;
+    let mut dump_factor = 5.0;
     let mut ecc_coeff_max = -1000.0;
     let mut h3_best = None;
 
@@ -201,15 +210,16 @@ fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
 
         if ecc_coeff < ecc_coeff_max {
             //border += 10;
-            X = get_k_points(num_points, Ir.width(), Ir.height(), false, border);
-            ir = get_feature_vector(Ir, &X, true);
-            dump_factor *= 1.05;
+            //X = get_k_points(num_points, Ir.width(), Ir.height(), false, border);
+            //ir = get_feature_vector(Ir, &X, true);
+            //dump_factor *= 1.05;
         } else {
             ecc_coeff_max = ecc_coeff;
             h3_best = P.get_projection_matrix();
         }
 
         println!("ecc_coeff: {}, ecc_coeff_approximation: {}", ecc_coeff, ecc_coeff_approximaiton);
+        writeln!(&mut w, "{} {} {}", ecc_coeff, P.params[2], P.params[5]).unwrap();
 
         if inc.norm() < threshold {
             break;
@@ -249,23 +259,29 @@ fn increment2(ir: &FeatureVector, iw: &FeatureVector, GT_G_inv_GT: &DMatrix::<f3
 }
 
 fn get_k_points(k: usize, w: u32, h: u32, rand: bool, border: u32) -> Vec<(u32, u32)> {
-    let inc = (((w - border) * (h - border)) as f32 / k as f32) as u32;
+    let inc = (((w - border) * (h - border)) as f32 / (2.0 * k as f32)) as u32;
     let mut rng = rand::thread_rng();
 
     let border = std::cmp::min(border, 150);
     let mut ind = border * w + border;
     let mut res = vec![];
 
-    while ind < w * h && res.len() < k {
+    while ind < w * (h - border) && res.len() < k {
         let x = border + ind % (w - 2 * border);
         let y = ind / h;
-        res.push((x, y));
+
+        res.push((x, y));           res.push((x, y+1));
+
         ind += inc;
 
         if rand {
             ind += rng.gen_range(0..=3);
         }
     }
+
+    res = res.drain(res.len() - k..).collect();
+
+    println!("K points: {}", res.len());
 
     res
 }
