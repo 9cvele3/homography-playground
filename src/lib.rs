@@ -1,9 +1,12 @@
 
-#![feature(test)]
-extern crate test;
+// bench
+//#![feature(test)]
+//extern crate test;
+//mod reg_bench;
+
 
 mod types;
 mod app;
 mod reg;
-mod reg_bench;
 pub use app::AppData;
+mod fft;
