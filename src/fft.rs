@@ -1,6 +1,6 @@
 use nalgebra::{Complex, ComplexField};
 
-pub fn fft_2D(img: &egui::ColorImage) -> egui::ColorImage {
+pub fn fft_2D(img: &egui::ColorImage, central: bool) -> egui::ColorImage {
     let mut pixels = egui_img_2_complex_vec(img);
 
     // todo: rayon
@@ -8,13 +8,13 @@ pub fn fft_2D(img: &egui::ColorImage) -> egui::ColorImage {
 
     /*
     for y in 0..img.height() {
-        fft_1D(&mut pixels[y*img.width() ..], img.width(), 1);
+        fft_1D(&mut pixels[y*img.width() ..], img.width(), 1, central);
     }
     */
 
     // todo: rayon
     for x in 0..img.width() {
-        fft_1D(&mut pixels[x..], img.height(), img.width());
+        fft_1D(&mut pixels[x..], img.height(), img.width(), central);
     }
 
     // todo: smart schedule for fft 2D ?
@@ -30,7 +30,7 @@ pub fn fft_2D(img: &egui::ColorImage) -> egui::ColorImage {
 
 */
 // is this slice type ?
-fn fft_1D(input: &mut [Complex<f32>], len: usize, pitch: usize) {
+fn fft_1D(input: &mut [Complex<f32>], len: usize, pitch: usize, central: bool) {
     let levels = (len as f32).log2().ceil() as usize;
 
     let mut k = 1;
@@ -65,6 +65,20 @@ fn fft_1D(input: &mut [Complex<f32>], len: usize, pitch: usize) {
     for i in 0..len {
         input[i * pitch] = input[i * pitch] / (len as f32).sqrt();
         //println!("{}", input[i]);
+    }
+
+    if central {
+        for i in 0..len/2 {
+            let tmp = input[i * pitch];
+            input[i * pitch] = input[(i + len / 2) * pitch];
+            input[(i + len/2) * pitch] = tmp;
+        }
+
+        for i in 0..len/4 {
+            let tmp = input[i * pitch];
+            input[i * pitch] = input[(len/2 - 1 - i) * pitch];
+            input[(len/2 - 1 - i) * pitch] = tmp;
+        }
     }
 }
 

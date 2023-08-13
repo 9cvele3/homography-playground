@@ -475,7 +475,7 @@ impl AppData {
         */
 
         if !self.blend_all && !self.fill_canvas {
-            let fft_img = fft_2D(&img);
+            let fft_img = fft_2D(&img, true);
             let texture = ctx.load_texture("fft", fft_img, egui::TextureFilter::Linear);
             ui.image(&texture, out_size);
         }
