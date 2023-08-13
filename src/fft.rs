@@ -112,14 +112,8 @@ fn fft_1D(input: &mut [Complex<f32>], len: usize, pitch: usize, central: bool) {
     if central {
         for i in 0..len/2 {
             let tmp = input[i * pitch];
-            input[i * pitch] = input[(i + len / 2) * pitch];
+            input[i * pitch] = input[(i + len/2) * pitch];
             input[(i + len/2) * pitch] = tmp;
-        }
-
-        for i in 0..len/4 {
-            let tmp = input[i * pitch];
-            input[i * pitch] = input[(len/2 - 1 - i) * pitch];
-            input[(len/2 - 1 - i) * pitch] = tmp;
         }
     }
 }
