@@ -3,7 +3,7 @@ use imageproc::geometric_transformations::{Projection, warp_into, Interpolation}
 use egui::ColorImage;
 use derivative::Derivative;
 
-use crate::fft::fft_2D;
+use crate::fft::{fft_2D, FFTType, FFTParams};
 
 
 fn save_image(im: &egui::ColorImage, path: &str) {
@@ -327,6 +327,7 @@ pub struct AppData {
     out_size_factor: f32,
     blend_all: bool,
     save_path: Option<String>,
+    fft: FFTParams,
 }
 
 impl AppData {
@@ -357,6 +358,7 @@ impl AppData {
             out_size_factor: 1.0,
             blend_all: false,
             save_path: None,
+            fft: Default::default(),
         }
     }
 
@@ -474,11 +476,15 @@ impl AppData {
         }
         */
 
-        if !self.blend_all && !self.fill_canvas {
-            let fft_img = fft_2D(&img, true);
+        if self.should_display_fft() {
+            let fft_img = fft_2D(&img, &self.fft);
             let texture = ctx.load_texture("fft", fft_img, egui::TextureFilter::Linear);
             ui.image(&texture, out_size);
         }
+    }
+
+    fn should_display_fft(&self) -> bool {
+        !(self.blend_all || self.fill_canvas)
     }
 
     fn display_images(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
@@ -511,6 +517,14 @@ impl AppData {
             if ui.button("Save").clicked() {
                 self.save_path = tinyfiledialogs::save_file_dialog("Save File", "");
             }
+        }
+
+        if self.should_display_fft() {
+            ui.radio_value(&mut self.fft.fft_type, FFTType::Horizontal, "FFT horizontal");
+            ui.radio_value(&mut self.fft.fft_type, FFTType::Vertical, "FFT vertical");
+            ui.radio_value(&mut self.fft.fft_type, FFTType::TwoDimensional, "FFT 2D");
+
+            ui.checkbox(&mut self.fft.central, "central");
         }
     }
 }

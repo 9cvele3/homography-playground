@@ -1,20 +1,37 @@
 use nalgebra::{Complex, ComplexField};
 
-pub fn fft_2D(img: &egui::ColorImage, central: bool) -> egui::ColorImage {
+#[derive(PartialEq, Default)]
+pub enum FFTType {
+    Horizontal,
+    Vertical,
+    #[default]
+    TwoDimensional,
+}
+
+#[derive(Default)]
+pub struct FFTParams {
+    pub central: bool,
+    pub fft_type: FFTType,
+}
+
+pub fn fft_2D(img: &egui::ColorImage, params: &FFTParams) -> egui::ColorImage {
     let mut pixels = egui_img_2_complex_vec(img);
 
     // todo: rayon
     // fft for rows
 
-    /*
-    for y in 0..img.height() {
-        fft_1D(&mut pixels[y*img.width() ..], img.width(), 1, central);
+    if matches!(params.fft_type, FFTType::Horizontal) || matches!(params.fft_type, FFTType::TwoDimensional) {
+        for y in 0..img.height() {
+            fft_1D(&mut pixels[y*img.width() ..], img.width(), 1, params.central);
+        }
     }
-    */
 
     // todo: rayon
-    for x in 0..img.width() {
-        fft_1D(&mut pixels[x..], img.height(), img.width(), central);
+
+    if matches!(params.fft_type, FFTType::Vertical) || matches!(params.fft_type, FFTType::TwoDimensional) {
+        for x in 0..img.width() {
+            fft_1D(&mut pixels[x..], img.height(), img.width(), params.central);
+        }
     }
 
     // todo: smart schedule for fft 2D ?
@@ -31,6 +48,31 @@ pub fn fft_2D(img: &egui::ColorImage, central: bool) -> egui::ColorImage {
 */
 // is this slice type ?
 fn fft_1D(input: &mut [Complex<f32>], len: usize, pitch: usize, central: bool) {
+    // shuffle input
+    {
+        let mut tmp: Vec<Complex<f32>> = vec![Complex::<f32>::new(1_f32, 0_f32); len];
+
+        for i in 0..len/2 {
+            if i % 2 == 0 {
+                tmp[i] = input[i * pitch];
+            } else {
+                tmp[i] = input[(i+len/2) * pitch];
+            }
+        }
+
+        for i in 0..len/2 - 1 {
+            if i % 2 == 0 {
+                tmp[len/2 + i] = input[(i + 1) * pitch];
+            } else {
+                tmp[len/2 + i] = input[(i + 1 + len/2) * pitch];
+            }
+        }
+
+        for i in 0..len {
+            input[i * pitch] = tmp[i];
+        }
+    }
+
     let levels = (len as f32).log2().ceil() as usize;
 
     let mut k = 1;
