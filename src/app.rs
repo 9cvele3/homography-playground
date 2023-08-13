@@ -3,6 +3,8 @@ use imageproc::geometric_transformations::{Projection, warp_into, Interpolation}
 use egui::ColorImage;
 use derivative::Derivative;
 
+use crate::fft::fft_2D;
+
 
 fn save_image(im: &egui::ColorImage, path: &str) {
     let size = im.size;
@@ -463,11 +465,19 @@ impl AppData {
 
         let texture = ctx.load_texture(texid, img.clone(), egui::TextureFilter::Linear);
 
+        /*
         if let Some(rect) = rect {
             let imgw = egui::Image::new(&texture, out_size);
             ui.put(*rect, imgw);
         } else {
             *rect = Some(ui.image(&texture, out_size).rect);
+        }
+        */
+
+        if !self.blend_all && !self.fill_canvas {
+            let fft_img = fft_2D(&img);
+            let texture = ctx.load_texture("fft", fft_img, egui::TextureFilter::Linear);
+            ui.image(&texture, out_size);
         }
     }
 
