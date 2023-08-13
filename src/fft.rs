@@ -19,10 +19,11 @@ pub fn fft_2D(img: &egui::ColorImage, params: &FFTParams) -> egui::ColorImage {
 
     // todo: rayon
     // fft for rows
+    let central = params.central;
 
     if matches!(params.fft_type, FFTType::Horizontal) || matches!(params.fft_type, FFTType::TwoDimensional) {
         for y in 0..img.height() {
-            fft_1D(&mut pixels[y*img.width() ..], img.width(), 1, params.central);
+            fft_1D(&mut pixels[y*img.width() ..], img.width(), 1, central);
         }
     }
 
@@ -30,7 +31,27 @@ pub fn fft_2D(img: &egui::ColorImage, params: &FFTParams) -> egui::ColorImage {
 
     if matches!(params.fft_type, FFTType::Vertical) || matches!(params.fft_type, FFTType::TwoDimensional) {
         for x in 0..img.width() {
-            fft_1D(&mut pixels[x..], img.height(), img.width(), params.central);
+            fft_1D(&mut pixels[x..], img.height(), img.width(), central);
+        }
+    }
+
+    if false {
+        // swap 1st and 3rd quadrant
+        for y in 0..img.height() / 2 {
+            for x in 0..img.width() / 2 {
+                let tmp = pixels[y * img.width() + x];
+                pixels[y * img.width() + x] = pixels[(y + img.height()/2) * img.width() + x + img.width()/2];
+                pixels[(y + img.height()/2) * img.width() + x + img.width()/2] = tmp;
+            }
+        }
+
+        // swap 2nd and 4th quadrant
+        for y in 0..img.height() / 2 {
+            for x in img.width() / 2 .. img.width() {
+                let tmp = pixels[y * img.width() + x];
+                pixels[y * img.width() + x] = pixels[(y + img.height()/2) * img.width() + x - img.width()/2];
+                pixels[(y + img.height()/2) * img.width() + x - img.width()/2] = tmp;
+            }
         }
     }
 
