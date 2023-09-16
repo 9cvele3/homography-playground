@@ -3,7 +3,7 @@
 use std::ops::Mul;
 
 use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
-use image::{self};
+use image::{self, GenericImageView};
 use nalgebra::{SMatrix, DVector, SVector, DMatrix, Matrix, Const, Dynamic, VecStorage};
 use rand::Rng;
 
@@ -134,6 +134,63 @@ fn draw_points(img: &mut image::ImageBuffer<image::Luma<u8>, Vec<u8>>, X: &Vec<(
     }
 }
 
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
+struct GradInd {
+    grad: i32,
+    y: u32,
+    x: u32
+}
+
+fn get_max_gradients(img: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>) -> Vec<(u32, u32)> {
+    use std::collections::BinaryHeap;
+
+    let mut heap = BinaryHeap::new();
+    let mut res = vec![];
+
+    for y in 3..img.height()-3 {
+        for x in 3..img.width()-3 {
+            let gx =
+                img.get_pixel(x, y - 1).0[0] as f32 + 2.0 * img.get_pixel(x, y - 1).0[0]  as f32 + img.get_pixel(x, y - 1 ).0[0] as f32
+                - img.get_pixel(x, y + 1).0[0] as f32 - 2.0 * img.get_pixel(x, y + 1).0[0] as f32 - img.get_pixel(x, y + 1 ).0[0] as f32;
+
+            let gy =
+                img.get_pixel(x - 1, y).0[0] as f32 + 2.0 * img.get_pixel(x - 1, y).0[0] as f32 + img.get_pixel(x - 1, y).0[0] as f32
+                - img.get_pixel(x + 1, y).0[0] as f32 - 2.0 * img.get_pixel(x + 1, y).0[0] as f32 - img.get_pixel(x + 1, y).0[0] as f32;
+
+            let gxy = gx.abs() + gy.abs();
+
+            heap.push((gxy as i32, y, x));
+        }
+    }
+
+    for _k in 1..100 {
+        let (_, y, x) = heap.pop().unwrap();
+
+        println!("{} {}", y, x);
+        res.push((y, x));
+    }
+
+    res
+}
+
+fn draw_max_gradients(img: &mut image::ImageBuffer<image::Luma<u8>, Vec<u8>>) {
+    let max_gradients = get_max_gradients(img);
+
+    for y in 0..img.height() {
+        for x in 0..img.width() {
+            if let Some(pix) = img.get_pixel_mut_checked(x, y) {
+                pix.0[0] = 0;
+            }
+        }
+    }
+
+    for (yi, xi) in max_gradients {
+        if let Some(pix) = img.get_pixel_mut_checked(xi, yi) {
+            pix.0[0] = 255;
+        }
+    }
+}
+
 #[allow(non_snake_case)]
 fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
     let mut w = std::fs::File::create("/tmp/ecc.log").unwrap();
@@ -163,9 +220,14 @@ fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
         let h3 = P.get_projection_matrix().expect("Unable to form projection matrix").invert(); // use inverse matrix here
 
         warp_into(&Iw, &h3, Interpolation::Bilinear, [0].into(), &mut Imgw);
-        let mut Imgw_clone = Imgw.clone();
-        draw_points(&mut Imgw_clone, &X, &P);
-        Imgw_clone.save(format!("img/iter{}.png", num_iter));
+
+        if true {
+            let mut Imgw_clone = Imgw.clone();
+            //draw_points(&mut Imgw_clone, &X, &P);
+            //draw_max_gradients(&mut Imgw_clone);
+            Imgw_clone.save(format!("img/iter{}.png", num_iter));
+        }
+
         let iw = get_feature_vector(&Imgw, &X, false);
 
         let G = calculate_jacobian(&Imgw, &X, &P); // dims: K x N = 1000 x 8
