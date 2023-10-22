@@ -69,9 +69,8 @@ fn test_pyr() {
 
     for (ind, p) in pyr.iter().enumerate() {
         let p_u8 = convert_luma_f32_to_luma_u8(p);
-        p_u8.save(format!("img/pyr{}.png", ind));
+        let _ = p_u8.save(format!("img/pyr{}.png", ind));
     }
-
 }
 
 

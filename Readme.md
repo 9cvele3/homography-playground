@@ -12,7 +12,7 @@ Later, you can just use the files from `dist` directory.
 
 * update egui to `0.19.0` to match the ```eframe_template``` sample
 
-* steal the `index.html` from ```egui_template``` and remove references to unused assets. Key element in `index.html` is the canvas and canvas id. 
+* steal the `index.html` from ```egui_template``` and remove references to unused assets. Key element in `index.html` is the canvas and canvas id.
 
 * add additional sections to Cargo.toml like in ```eframe_template```
 
@@ -46,3 +46,5 @@ Later, you can just use the files from `dist` directory.
 
 
 bench - at the root of the project
+
+test - point registration

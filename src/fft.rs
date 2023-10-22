@@ -77,15 +77,15 @@ fn fft_1D(input: &mut [Complex<f32>], len: usize, pitch: usize, central: bool) {
             if i % 2 == 0 {
                 tmp[i] = input[i * pitch];
             } else {
-                tmp[i] = input[(i+len/2) * pitch];
+                tmp[i] = input[(i+len/2 - 1) * pitch];
             }
         }
 
-        for i in 0..len/2 - 1 {
+        for i in 0..len/2 {
             if i % 2 == 0 {
                 tmp[len/2 + i] = input[(i + 1) * pitch];
             } else {
-                tmp[len/2 + i] = input[(i + 1 + len/2) * pitch];
+                tmp[len/2 + i] = input[(i + 1 + len/2 - 1) * pitch];
             }
         }
 
@@ -93,6 +93,8 @@ fn fft_1D(input: &mut [Complex<f32>], len: usize, pitch: usize, central: bool) {
             input[i * pitch] = tmp[i];
         }
     }
+
+    // println!("{:?}", input);
 
     let levels = (len as f32).log2().ceil() as usize;
 
@@ -112,9 +114,9 @@ fn fft_1D(input: &mut [Complex<f32>], len: usize, pitch: usize, central: bool) {
                     println!("group ind {}, group_size {}, butterfly {}, ind1 {}, ind2 {}", group, elements_per_group, butterfly, ind1, ind2);
                 }
 
-
                 let w = Complex::<f32>::new((butterfly as f32 * angle).cos(), (butterfly as f32 * -angle).sin());
-                let left = input[ind1] + w * input[ind2];
+                // println!("ind1 {}, ind2 {}, w {:?}, {}, {}", ind1, ind2, w, input[ind1], input[ind2]);
+                let left = input[ind1]  + w * input[ind2];
                 let right = input[ind1] - w * input[ind2];
 
                 input[ind1] = left;
@@ -161,3 +163,69 @@ fn complex_2_egui_img(complex: &Vec<Complex<f32>>, out_size: [usize; 2]) -> egui
     egui::ColorImage{size: out_size, pixels}
 }
 
+#[test]
+fn test_fft_2() {
+    let mut input: Vec<Complex<f32>> = (1..3).into_iter()
+                                        .map(|v| {
+                                                Complex::<f32>::new(v as f32, 0_f32)
+                                        })
+                                        .collect();
+
+    println!("{:?}", input);
+
+    let len = input.len();
+    fft_1D(&mut input, len, 1, false);
+
+    let output = vec![
+        Complex::<f32>::new(3.0000,     0.0),
+        Complex::<f32>::new(-1.0000,     0.0),
+    ];
+
+    assert_eq!(output, input);
+}
+
+#[test]
+fn test_fft_4() {
+    let mut input: Vec<Complex<f32>> = (1..5).into_iter()
+                                        .map(|v| {
+                                                Complex::<f32>::new(v as f32, 0_f32)
+                                        })
+                                        .collect();
+
+    let len = input.len();
+    fft_1D(&mut input, len, 1, false);
+
+    let output = vec![
+        Complex::<f32>::new(10.0000,     0.0),
+        Complex::<f32>::new(-2.0000,     2.0),
+        Complex::<f32>::new(-2.0000,     0.0),
+        Complex::<f32>::new(-2.0000,    -2.0),
+    ];
+
+    assert_eq!(output, input);
+}
+
+#[test]
+fn test_fft_8() {
+    let mut input: Vec<Complex<f32>> = (1..9).into_iter()
+                                        .map(|v| {
+                                                Complex::<f32>::new(v as f32, 0_f32)
+                                        })
+                                        .collect();
+
+    let len = input.len();
+    fft_1D(&mut input, len, 1, false);
+
+    let output = vec![
+        Complex::<f32>::new(36.0000,     0.0),
+        Complex::<f32>::new(-4.0000,  9.6569),
+        Complex::<f32>::new(-4.0000,  4.0000),
+        Complex::<f32>::new(-4.0000,  1.6569),
+        Complex::<f32>::new(-4.0000,     0.0),
+        Complex::<f32>::new(-4.0000,  1.6569),
+        Complex::<f32>::new(-4.0000,  4.0000),
+        Complex::<f32>::new(-4.0000,  9.6569)
+    ];
+
+    assert_eq!(output, input);
+}

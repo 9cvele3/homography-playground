@@ -2,10 +2,12 @@
 
 use std::ops::Mul;
 
-use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
+use imageproc::{geometric_transformations::{Projection, warp_into, Interpolation, warp}, filter::filter3x3};
 use image::{self, GenericImageView};
 use nalgebra::{SMatrix, DVector, SVector, DMatrix, Matrix, Const, Dynamic, VecStorage};
 use rand::Rng;
+
+use crate::pyr::create_pyramid;
 
 const K: usize = 1000;
 const N: usize = 8;
@@ -14,11 +16,13 @@ type FeatureVector = DVector::<f32>;//SVector::<f32, K>;
 type ImgBuffer = image::ImageBuffer<image::Luma<u8>, Vec<u8>>;
 type CMatrix = nalgebra::Matrix<f32, Dynamic, Const<1>, VecStorage<f32, Dynamic, Const<1>>>;
 
+#[derive(Clone)]
 enum ParamsType {
     Trans,
     Proj,
 }
 
+#[derive(Clone)]
 struct Params {
     params: DVector::<f32>,
     ptype: ParamsType,
@@ -51,6 +55,11 @@ impl Params {
 
     }
 
+    fn double_translation_params(&mut self) {
+        self.params[2] *= 2.0;
+        self.params[5] *= 2.0;
+    }
+
     fn print_params(&self) {
         println!("{} {} {} | {} {} {} | {} {}", self.params[0], self.params[1], self.params[2], self.params[3], self.params[4], self.params[5], self.params[6], self.params[7]);
     }
@@ -58,15 +67,6 @@ impl Params {
 
 
 fn dump_feature_vector(fv: &FeatureVector) {
-
-}
-
-fn convert_luma_u8_to_luma_f32(img: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>) -> ImgBuffer {
-    let img_f = ImgBuffer::new(img.width(), img.height());
-
-
-
-    img_f
 }
 
 #[test]
@@ -99,7 +99,10 @@ pub fn test_ecc_impl() {
 //    let img2_f = ImgBuffer::new(img2.width(), img2.height());
 
 
-    let proj = ecc(&img1, &img2).expect("Registration failed");
+    let proj = ecc(&img1, &img2, Params::new(ParamsType::Proj))
+                                .expect("Registration failed")
+                                .get_projection_matrix()
+                                .expect("Unable to form projection matrix");
     println!("{:?}", proj);
 }
 
@@ -141,7 +144,7 @@ struct GradInd {
     x: u32
 }
 
-fn get_max_gradients(img: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>) -> Vec<(u32, u32)> {
+fn get_max_gradients(img: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>, num_points: u32) -> Vec<(u32, u32)> {
     use std::collections::BinaryHeap;
 
     let mut heap = BinaryHeap::new();
@@ -163,7 +166,7 @@ fn get_max_gradients(img: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>) -> Vec<
         }
     }
 
-    for _k in 1..100 {
+    for _k in 0..num_points {
         let (_, y, x) = heap.pop().unwrap();
 
         println!("{} {}", y, x);
@@ -174,7 +177,7 @@ fn get_max_gradients(img: &image::ImageBuffer<image::Luma<u8>, Vec<u8>>) -> Vec<
 }
 
 fn draw_max_gradients(img: &mut image::ImageBuffer<image::Luma<u8>, Vec<u8>>) {
-    let max_gradients = get_max_gradients(img);
+    let max_gradients = get_max_gradients(img, 100);
 
     for y in 0..img.height() {
         for x in 0..img.width() {
@@ -192,24 +195,45 @@ fn draw_max_gradients(img: &mut image::ImageBuffer<image::Luma<u8>, Vec<u8>>) {
 }
 
 #[allow(non_snake_case)]
-fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
+fn ecc_pyr(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
+    let pyr_r = create_pyramid(Ir);
+    let pyr_w = create_pyramid(Iw);
+    let mut initial_params = Params::new(ParamsType::Proj);
+
+    for (layer_r, layer_w) in pyr_r.iter().rev().zip(pyr_w.iter().rev()) {
+        initial_params.double_translation_params();
+
+        /*
+        if let Some(proj) = ecc(layer_r, layer_w, initial_params) {
+            initial_params = proj;
+        } else {
+            return None;
+        }
+        */
+    }
+
+    todo!();
+}
+
+#[allow(non_snake_case)]
+fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer, initial_params: Params) -> Option<Params> {
     let mut w = std::fs::File::create("/tmp/ecc.log").unwrap();
     use std::io::Write;
 
     let mut num_points = K;
     let mut border = 40;
-    let mut X = get_k_points(num_points, Ir.width(), Ir.height(), false, border);
+    //let mut X = get_k_points(num_points, Ir.width(), Ir.height(), false, border);
+    let mut X = get_max_gradients(&Ir, num_points as u32);
     let mut ir = get_feature_vector(Ir, &X, true);
 
-
-    let mut P = Params::new(ParamsType::Trans);
+    let mut P = initial_params;
 
     let threshold = 0.0001;
     let max_num_iter = 50;
     let mut num_iter = 0;
     let mut dump_factor = 5.0;
     let mut ecc_coeff_max = -1000.0;
-    let mut h3_best = None;
+    let mut params_best = None;
 
     loop {
         println!("##########################\niteration {}", num_iter);
@@ -277,11 +301,13 @@ fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
             //dump_factor *= 1.05;
         } else {
             ecc_coeff_max = ecc_coeff;
-            h3_best = P.get_projection_matrix();
+            params_best = Some(P.clone());
         }
 
         println!("ecc_coeff: {}, ecc_coeff_approximation: {}", ecc_coeff, ecc_coeff_approximaiton);
-        writeln!(&mut w, "{} {} {}", ecc_coeff, P.params[2], P.params[5]).unwrap();
+//        writeln!(&mut w, "{} {} {}", ecc_coeff_approximaiton, P.params[2], P.params[5]).unwrap();
+        writeln!(&mut w, "{}", ecc_coeff_approximaiton).unwrap();
+
 
         if inc.norm() < threshold {
             break;
@@ -299,7 +325,7 @@ fn ecc(Ir: &ImgBuffer, Iw: &ImgBuffer) -> Option<Projection> {
         }
     }
 
-    h3_best
+    params_best
 }
 
 //  increment: coeff * ir - iw

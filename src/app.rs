@@ -148,10 +148,12 @@ enum Homography {
         h33: f32
     } ,
     Points {
-        prev_points_dst: [(f32, f32); 4],
-        prev_points_src: [(f32, f32); 4],
         new_points_src: [(f32, f32); 4],
         new_points_dst: [(f32, f32); 4],
+
+        // used for caching, so projection is not calculated for each frame
+        prev_points_dst: [(f32, f32); 4],
+        prev_points_src: [(f32, f32); 4],
         #[derivative(PartialEq = "ignore")]
         proj: Option<Projection>,
     },
