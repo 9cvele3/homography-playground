@@ -1,11 +1,11 @@
 use imageproc::{filter::filter3x3, geometric_transformations::{warp, Projection, Interpolation, warp_into}};
 
 
-type ImgBufferU8 = image::ImageBuffer<image::Luma<u8>, Vec<u8>>;
+pub type ImgBufferU8 = image::ImageBuffer<image::Luma<u8>, Vec<u8>>;
 
-type ImgBufferF = image::ImageBuffer<image::Luma<f32>, Vec<f32>>;
+pub type ImgBufferF = image::ImageBuffer<image::Luma<f32>, Vec<f32>>;
 
-fn convert_luma_u8_to_luma_f32(img: &ImgBufferU8) -> ImgBufferF {
+pub fn convert_luma_u8_to_luma_f32(img: &ImgBufferU8) -> ImgBufferF {
     let mut img_f = ImgBufferF::new(img.width(), img.height());
 
     for (pixel_u8, pixel_f32) in img.as_raw().iter().zip(img_f.as_mut().iter_mut()) {
@@ -15,7 +15,7 @@ fn convert_luma_u8_to_luma_f32(img: &ImgBufferU8) -> ImgBufferF {
     img_f
 }
 
-fn convert_luma_f32_to_luma_u8(img_f: &ImgBufferF) -> ImgBufferU8 {
+pub fn convert_luma_f32_to_luma_u8(img_f: &ImgBufferF) -> ImgBufferU8 {
     let mut img_u8 = ImgBufferU8::new(img_f.width(), img_f.height());
 
     for (pixel_f32, pixel_u8) in img_f.as_raw().iter().zip(img_u8.as_mut().iter_mut()) {
