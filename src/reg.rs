@@ -9,7 +9,7 @@ use rand::Rng;
 
 use crate::pyr::{create_pyramid, ImgBufferF, ImgBufferU8, convert_luma_u8_to_luma_f32, convert_luma_f32_to_luma_u8};
 
-const K: usize = 100;
+const K: usize = 300;
 const N: usize = 8;
 type Jacobian = DMatrix::<f32>;//Matrix::<f32, nalgebra::Const<K>, nalgebra::Const<N>, nalgebra::RawStorage<f32, nalgebra::Const<K>, nalgebra::Const<N>>>;
 type FeatureVector = DVector::<f32>;//SVector::<f32, K>;
@@ -193,6 +193,7 @@ fn draw_max_gradients(img: &mut ImgBufferF) {
 fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
     let mut w = std::fs::OpenOptions::new()
                                         .create(true)
+                                        .truncate(true)
                                         .write(true)
                                         .open("/tmp/ecc.log").unwrap();
 
@@ -216,7 +217,7 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
 
 #[allow(non_snake_case)]
 fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -> Option<Params> {
-    let mut w = std::fs::OpenOptions::new().append(true).open("/tmp/ecc.log").unwrap();
+    let mut w: std::fs::File = std::fs::OpenOptions::new().append(true).open("/tmp/ecc.log").unwrap();
     use std::io::Write;
 
     let num_points = K;
@@ -318,6 +319,7 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -
         }
     }
 
+    writeln!(&mut w, "{}", ecc_coeff_max).unwrap();
     params_best
 }
 
