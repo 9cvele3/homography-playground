@@ -82,7 +82,7 @@ pub fn test_ecc_impl() {
         if p.is_ok() {
             let path = p.unwrap().path();
 
-            if path.to_str().unwrap().starts_with("./img/iter") {
+            if path.to_str().unwrap().starts_with("./img/level") {
                 println!("{:?}", path);
                 std::fs::remove_file(path);
             } else {
@@ -232,6 +232,7 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -
     let mut num_iter = 0;
     let mut ecc_coeff_max = -1000.0;
     let mut params_best = None;
+    let mut last_is_largest = false;
 
     loop {
         println!("##########################\niteration {}", num_iter);
@@ -293,9 +294,11 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -
         let ecc_coeff_approximaiton = (ir.transpose() * (iw.clone() + G.clone() * inc.clone()) / (iw.clone() + G.clone()*inc.clone()).norm())[(0, 0)];
 
         if ecc_coeff < ecc_coeff_max {
+            last_is_largest = false;
 
         } else {
             ecc_coeff_max = ecc_coeff;
+            last_is_largest = true;
             params_best = Some(P.clone());
         }
 
@@ -303,9 +306,15 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -
         writeln!(&mut w, "{}", ecc_coeff_approximaiton).unwrap();
 
 
+        let should_stop = if last_is_largest {
+            num_iter < max_num_iter
+        } else {
+            num_iter < 5
+        };
+
         if inc.norm() < threshold {
             break;
-        } else if num_iter < max_num_iter {
+        } else if should_stop {
             for inc_el in inc.iter() {
                 println!("inc el {}", inc_el);
             }
