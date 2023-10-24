@@ -9,7 +9,7 @@ use rand::Rng;
 
 use crate::pyr::{create_pyramid, ImgBufferF, ImgBufferU8, convert_luma_u8_to_luma_f32, convert_luma_f32_to_luma_u8};
 
-const K: usize = 300;
+const K: usize = 20;
 const N: usize = 8;
 type Jacobian = DMatrix::<f32>;//Matrix::<f32, nalgebra::Const<K>, nalgebra::Const<N>, nalgebra::RawStorage<f32, nalgebra::Const<K>, nalgebra::Const<N>>>;
 type FeatureVector = DVector::<f32>;//SVector::<f32, K>;
@@ -62,10 +62,6 @@ impl Params {
     fn print_params(&self) {
         println!("{} {} {} | {} {} {} | {} {}", self.params[0], self.params[1], self.params[2], self.params[3], self.params[4], self.params[5], self.params[6], self.params[7]);
     }
-}
-
-
-fn dump_feature_vector(fv: &FeatureVector) {
 }
 
 #[test]
@@ -200,15 +196,65 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
     let pyr_r = create_pyramid(Ir);
     let pyr_w = create_pyramid(Iw);
     let mut initial_params = Params::new(ParamsType::Trans);
+    let mut ecc_max = 0.0;
+    let mut points: Option<Vec<(u32, u32)>> = None;
 
-    for (level, (layer_r, layer_w)) in pyr_r.iter().rev().zip(pyr_w.iter().rev()).enumerate() {
+    for (level, (layer_r, layer_w))
+                                                            in pyr_r.iter().rev().zip(pyr_w.iter().rev()).enumerate() {
         println!("########################Level#########################");
         initial_params.double_translation_params();
 
-        if let Some(proj) = ecc(layer_r, layer_w, initial_params, level) {
-            initial_params = proj;
-        } else {
-            return None;
+        let X = get_max_gradients(layer_r, K as u32);
+
+        let res1 = ecc(layer_r, layer_w, &initial_params, &Some(X), level);
+
+        if let Some(points) = points.as_mut() {
+            for (x, y) in points.iter_mut() {
+                *x *= 2;
+                *y *= 2;
+            }
+        }
+        let res2 = ecc(layer_r, layer_w, &initial_params, &points, level);
+
+        match (res1, res2) {
+            (Some((params1, X1, ecc1)), Some((params2, X2, ecc2))) => {
+                if ecc1 >= ecc2 {
+                    initial_params = params1.clone();
+                    points = Some(X1);
+
+                    if ecc1 > ecc_max {
+                        ecc_max = ecc1;
+                    }
+
+                } else {
+                    initial_params = params2.clone();
+                    points = Some(X2);
+
+                    if ecc2 > ecc_max {
+                        ecc_max = ecc2;
+                    }
+                }
+            },
+            (Some((params1, X1, ecc1)), None) => {
+                if ecc1 > ecc_max {
+                    ecc_max = ecc1;
+                }
+
+                initial_params = params1.clone();
+                points = Some(X1);
+
+            },
+            (None, Some((params2, X2, ecc2))) => {
+                if ecc2 > ecc_max {
+                    ecc_max = ecc2;
+                }
+
+                initial_params = params2.clone();
+                points = Some(X2);
+            },
+            (None, None) => {
+                return None;
+            }
         }
     }
 
@@ -216,19 +262,22 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
 }
 
 #[allow(non_snake_case)]
-fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -> Option<Params> {
+fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec<(u32, u32)>>, level: usize) -> Option<(Params, Vec<(u32, u32)>, f32)> {
+    if X.is_none() {
+        return None;
+    }
+
+    let X = X.as_ref().unwrap();
+
     let mut w: std::fs::File = std::fs::OpenOptions::new().append(true).open("/tmp/ecc.log").unwrap();
     use std::io::Write;
 
-    let num_points = K;
-    //let mut X = get_k_points(num_points, Ir.width(), Ir.height(), false, border);
-    let X = get_max_gradients(&Ir, num_points as u32);
     let ir = get_feature_vector(Ir, &X, true);
 
-    let mut P = initial_params;
+    let mut P = initial_params.clone();
 
     let threshold = 0.0001;
-    let max_num_iter = 50;
+    let max_num_iter = 15;
     let mut num_iter = 0;
     let mut ecc_coeff_max = -1000.0;
     let mut params_best = None;
@@ -244,10 +293,10 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -
 
         warp_into(&Iw, &h3, Interpolation::Bilinear, [0.0].into(), &mut Imgw);
 
-        if true {
+        if false {
             let imgw_clone = convert_luma_f32_to_luma_u8(&Imgw);
             //draw_points(&mut Imgw_clone, &X, &P);
-            //draw_max_gradients(&mut Imgw_clone);
+            //draw_max_gradients(&mut imgw_clone);
             let _ = imgw_clone.save(format!("img/level_{}_iter_{}.png", level, num_iter));
         }
 
@@ -299,14 +348,15 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -
         } else {
             ecc_coeff_max = ecc_coeff;
             last_is_largest = true;
+            P.update(&inc, 1.0);
             params_best = Some(P.clone());
         }
 
         println!("ecc_coeff: {}, ecc_coeff_approximation: {}", ecc_coeff, ecc_coeff_approximaiton);
-        writeln!(&mut w, "{}", ecc_coeff_approximaiton).unwrap();
+        writeln!(&mut w, "{}, {}, {}", ecc_coeff_approximaiton, P.params[2], P.params[5]).unwrap();
 
 
-        let should_stop = if last_is_largest {
+        let should_continue = if last_is_largest {
             num_iter < max_num_iter
         } else {
             num_iter < 5
@@ -314,12 +364,11 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -
 
         if inc.norm() < threshold {
             break;
-        } else if should_stop {
+        } else if should_continue {
             for inc_el in inc.iter() {
                 println!("inc el {}", inc_el);
             }
 
-            P.update(&inc, 1.0);
             P.print_params();
 
             num_iter += 1;
@@ -329,7 +378,12 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: Params, level: usize) -
     }
 
     writeln!(&mut w, "{}", ecc_coeff_max).unwrap();
-    params_best
+
+    if params_best.is_some() {
+        Some((params_best.unwrap(), X.clone(), ecc_coeff_max))
+    } else {
+        None
+    }
 }
 
 //  increment: coeff * ir - iw
