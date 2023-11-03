@@ -293,10 +293,12 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
 
         warp_into(&Iw, &h3, Interpolation::Bilinear, [0.0].into(), &mut Imgw);
 
-        if false {
-            let imgw_clone = convert_luma_f32_to_luma_u8(&Imgw);
+        if true {
+            let mut imgw_clone = Imgw.clone();
+            draw_max_gradients(&mut imgw_clone);
+
+            let imgw_clone = convert_luma_f32_to_luma_u8(&imgw_clone);
             //draw_points(&mut Imgw_clone, &X, &P);
-            //draw_max_gradients(&mut imgw_clone);
             let _ = imgw_clone.save(format!("img/level_{}_iter_{}.png", level, num_iter));
         }
 
@@ -353,8 +355,10 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
         }
 
         println!("ecc_coeff: {}, ecc_coeff_approximation: {}", ecc_coeff, ecc_coeff_approximaiton);
-        writeln!(&mut w, "{}, {}, {}", ecc_coeff_approximaiton, P.params[2], P.params[5]).unwrap();
+        writeln!(&mut w, "{}", ecc_coeff_approximaiton).unwrap();
 
+//        writeln!(&mut w, "{}, {}, {}", ecc_coeff_approximaiton, P.params[2], P.params[5]).unwrap();
+//        writeln!(&mut w, "{}, {}, {}", 0, 0, 0).unwrap();
 
         let should_continue = if last_is_largest {
             num_iter < max_num_iter
@@ -378,6 +382,7 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
     }
 
     writeln!(&mut w, "{}", ecc_coeff_max).unwrap();
+    writeln!(&mut w, "{}", 0).unwrap();
 
     if params_best.is_some() {
         Some((params_best.unwrap(), X.clone(), ecc_coeff_max))
