@@ -9,7 +9,6 @@ use rand::Rng;
 
 use crate::pyr::{create_pyramid, ImgBufferF, ImgBufferU8, convert_luma_u8_to_luma_f32, convert_luma_f32_to_luma_u8};
 
-const K: usize = 20;
 const N: usize = 8;
 type Jacobian = DMatrix::<f32>;//Matrix::<f32, nalgebra::Const<K>, nalgebra::Const<N>, nalgebra::RawStorage<f32, nalgebra::Const<K>, nalgebra::Const<N>>>;
 type FeatureVector = DVector::<f32>;//SVector::<f32, K>;
@@ -197,6 +196,7 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
     let pyr_w = create_pyramid(Iw);
     let mut initial_params = Params::new(ParamsType::Trans);
     let mut ecc_max = 0.0;
+    let mut num_points = 15;
     let mut points: Option<Vec<(u32, u32)>> = None;
 
     for (level, (layer_r, layer_w))
@@ -204,7 +204,8 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
         println!("########################Level#########################");
         initial_params.double_translation_params();
 
-        let X = get_max_gradients(layer_r, K as u32);
+        let X = get_max_gradients(layer_r, 15);
+        num_points *= 2;
 
         let res1 = ecc(layer_r, layer_w, &initial_params, &Some(X), level);
 
@@ -464,7 +465,7 @@ fn calculate_jacobian(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) -> Jacob
 
 #[allow(non_snake_case)]
 fn calculate_jacobian_trans(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) -> Jacobian {
-    let mut G = Jacobian::zeros(K, 2);
+    let mut G = Jacobian::zeros(X.len(), 2);
 
     for (k, (x0, x1)) in X.iter().enumerate() {
         let Y = warp_coords(&P, (*x0, *x1));
@@ -495,7 +496,7 @@ fn calculate_jacobian_trans(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) ->
 
 #[allow(non_snake_case)]
 fn calculate_jacobian_proj(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) -> Jacobian {
-    let mut G = Jacobian::zeros(K, 8);
+    let mut G = Jacobian::zeros(X.len(), 8);
 
     for (k, (x0, x1)) in X.iter().enumerate() {
         let Y = warp_coords(&P, (*x0, *x1));
