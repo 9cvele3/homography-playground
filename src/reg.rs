@@ -17,6 +17,7 @@ type CMatrix = nalgebra::Matrix<f32, Dynamic, Const<1>, VecStorage<f32, Dynamic,
 #[derive(Clone)]
 enum ParamsType {
     Trans,
+    Trz,
     Proj,
 }
 
@@ -44,6 +45,11 @@ impl Params {
                 self.params[2] += inc[0] * dump_factor;
                 self.params[5] += inc[1] * dump_factor;
             },
+            ParamsType::Trz => {
+                for i in 0..6 {
+                    self.params[i] += inc[i] * dump_factor;
+                }
+            }
             ParamsType::Proj => {
                 for i in 0..8 {
                     self.params[i] += inc[i] * dump_factor;
@@ -90,7 +96,7 @@ pub fn test_ecc_impl() {
     let img2 = image::open("img/lena-trans-x5-y10.png").expect("File not found!").grayscale().into_luma8();
 
 
-    let proj = ecc_pyr(&img1, &img2)
+    let proj = ecc_pyr(&img1, &img2, ParamsType::Trz)
                     .expect("Registration failed");
 
     println!("{:?}", proj);
@@ -185,7 +191,7 @@ fn draw_max_gradients(img: &mut ImgBufferF) {
 }
 
 #[allow(non_snake_case)]
-fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
+fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8, params_type: ParamsType) -> Option<Projection> {
     let mut w = std::fs::OpenOptions::new()
                                         .create(true)
                                         .truncate(true)
@@ -194,7 +200,7 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
 
     let pyr_r = create_pyramid(Ir);
     let pyr_w = create_pyramid(Iw);
-    let mut initial_params = Params::new(ParamsType::Trans);
+    let mut initial_params = Params::new(params_type);
     let mut ecc_max = 0.0;
     let mut num_points = 15;
     let mut points: Option<Vec<(u32, u32)>> = None;
@@ -204,8 +210,8 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8) -> Option<Projection> {
         println!("########################Level#########################");
         initial_params.double_translation_params();
 
-        let X = get_max_gradients(layer_r, 15);
-        num_points *= 2;
+        let X = get_max_gradients(layer_r, num_points);
+        num_points = 3 * num_points / 2;
 
         let res1 = ecc(layer_r, layer_w, &initial_params, &Some(X), level);
 
@@ -356,9 +362,9 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
         }
 
         println!("ecc_coeff: {}, ecc_coeff_approximation: {}", ecc_coeff, ecc_coeff_approximaiton);
-        writeln!(&mut w, "{}", ecc_coeff_approximaiton).unwrap();
+//        writeln!(&mut w, "{}", ecc_coeff_approximaiton).unwrap();
 
-//        writeln!(&mut w, "{}, {}, {}", ecc_coeff_approximaiton, P.params[2], P.params[5]).unwrap();
+        writeln!(&mut w, "{}, {}, {}", ecc_coeff_approximaiton, P.params[2], P.params[5]).unwrap();
 //        writeln!(&mut w, "{}, {}, {}", 0, 0, 0).unwrap();
 
         let should_continue = if last_is_largest {
@@ -457,6 +463,9 @@ fn calculate_jacobian(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) -> Jacob
         ParamsType::Trans => {
             calculate_jacobian_trans(Iw, X, P)
         },
+        ParamsType::Trz => {
+            calculate_jacobian_trz(Iw, X, P)
+        }
         ParamsType::Proj => {
             calculate_jacobian_proj(Iw, X, P)
         }
@@ -471,6 +480,15 @@ fn calculate_jacobian_trans(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) ->
         let Y = warp_coords(&P, (*x0, *x1));
         let dI_per_dy1 = get_pixel_value(Iw, Y.0 + 1, Y.1) - get_pixel_value(Iw, Y.0, Y.1);
         let dI_per_dy2 = get_pixel_value(Iw, Y.0, Y.1 + 1) - get_pixel_value(Iw, Y.0, Y.1);
+
+/*
+        1   0  p2      x0      x0+p2
+        0   1  p5  *   x1  =   x1+p5
+        0   0   1       1        1
+
+        phi1 = x0 + p2
+        phi2 = x1 + p5
+*/
 
         // N = 0
         {
@@ -488,6 +506,75 @@ fn calculate_jacobian_trans(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) ->
             G[(k, 1)] = el;
         }
     }
+
+    zero_mean_over_columns(&mut G);
+
+    G
+}
+
+#[allow(non_snake_case)]
+fn calculate_jacobian_trz(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) -> Jacobian {
+    let mut G = Jacobian::zeros(X.len(), 8);
+
+    for (k, (x0, x1)) in X.iter().enumerate() {
+        let Y = warp_coords(&P, (*x0, *x1));
+        let dI_per_dy1 = get_pixel_value(Iw, Y.0 + 1, Y.1) - get_pixel_value(Iw, Y.0, Y.1);
+        let dI_per_dy2 = get_pixel_value(Iw, Y.0, Y.1 + 1) - get_pixel_value(Iw, Y.0, Y.1);
+/*
+        p0  p1  p2      x0      p0x0+p1x1+p2
+        p3  p4  p5  *   x1  =   p3x0+p4x1+p5
+        0   0   1       1           1
+
+        phi1 = (p0x0 + p1x1 + p2)
+        phi2 = (p3x0 + p4x1 + p5)
+*/
+
+        let numerator1 = P.params[0] * (*x0 as f32) + P.params[1] * (*x1 as f32) + P.params[2];
+        let numerator2 = P.params[3] * (*x0 as f32) + P.params[4] * (*x1 as f32) + P.params[5];
+
+        // N = 0
+        {
+            let dphi_ofx1_per_dp0 = *x0 as f32;
+            let dphi_ofx2_per_dp0 = 0.0;
+            let el = dI_per_dy1 * dphi_ofx1_per_dp0 + dI_per_dy2 * dphi_ofx2_per_dp0;
+            G[(k, 0)] = el;
+        }
+        // N = 1
+        {
+            let dphi_ofx1_per_dp1 = *x1 as f32;
+            let dphi_ofx2_per_dp1 = 0.0;
+            let el = dI_per_dy1 * dphi_ofx1_per_dp1 + dI_per_dy2 * dphi_ofx2_per_dp1;
+            G[(k, 1)] = el;
+        }
+        // N = 2
+        {
+            let dphi_ofx1_per_dp2 = 1.0;
+            let dphi_ofx2_per_dp2 = 0.0;
+            let el = dI_per_dy1 * dphi_ofx1_per_dp2 + dI_per_dy2 * dphi_ofx2_per_dp2;
+            G[(k, 2)] = el;
+        }
+        // N = 3
+        {
+            let dphi_ofx1_per_dp3 = 0.0;
+            let dphi_ofx2_per_dp3 = *x0 as f32;
+            let el = dI_per_dy1 * dphi_ofx1_per_dp3 + dI_per_dy2 * dphi_ofx2_per_dp3;
+            G[(k, 3)] = el;
+        }
+        // N = 4
+        {
+            let dphi_ofx1_per_dp4 = 0.0;
+            let dphi_ofx2_per_dp4 = *x1 as f32;
+            let el = dI_per_dy1 * dphi_ofx1_per_dp4 + dI_per_dy2 * dphi_ofx2_per_dp4;
+            G[(k, 4)] = el;
+        }
+        // N = 5
+        {
+            let dphi_ofx1_per_dp5 = 0.0;
+            let dphi_ofx2_per_dp5 = 1.0;
+            let el = dI_per_dy1 * dphi_ofx1_per_dp5 + dI_per_dy2 * dphi_ofx2_per_dp5;
+            G[(k, 5)] = el;
+        }
+    } // for
 
     zero_mean_over_columns(&mut G);
 
