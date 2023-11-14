@@ -92,11 +92,11 @@ pub fn test_ecc_impl() {
         }
     }
 
-    let img1 = image::open("img/lena-gray.png").expect("File not found!").grayscale().into_luma8();
-    let img2 = image::open("img/lena-trans-x5-y10.png").expect("File not found!").grayscale().into_luma8();
+    let img1 = image::open("img/translation/00.jpg").expect("File not found!").grayscale().into_luma8();
+    let img2 = image::open("img/translation/04.jpg").expect("File not found!").grayscale().into_luma8();
 
 
-    let proj = ecc_pyr(&img1, &img2, ParamsType::Trz)
+    let proj = ecc_pyr(&img1, &img2, ParamsType::Trans)
                     .expect("Registration failed");
 
     println!("{:?}", proj);
@@ -110,12 +110,14 @@ fn get_feature_vector(im: &ImgBufferF, coords: &Vec<(u32, u32)>, normalize: bool
         fv[i] = pixel as f32;
     }
 
-    let norm = fv.norm();
+    let norm = fv.norm() + 0.0000000001;
     fv.add_scalar_mut(-fv.mean());
 
     if normalize {
         for el in fv.iter_mut() {
             *el = *el / norm;
+
+            assert!(*el == *el); // check for NaNs
         }
     }
 
@@ -207,7 +209,7 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8, params_type: ParamsType) -> Optio
 
     for (level, (layer_r, layer_w))
                                                             in pyr_r.iter().rev().zip(pyr_w.iter().rev()).enumerate() {
-        println!("########################Level#########################");
+        println!("########################Level {}#########################", level);
         initial_params.double_translation_params();
 
         let X = get_max_gradients(layer_r, num_points);
@@ -268,6 +270,16 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8, params_type: ParamsType) -> Optio
     initial_params.get_projection_matrix()
 }
 
+fn dump_ecc_intermediate_results(Imgw: ImgBufferF, level: usize, num_iter: usize) {
+    let mut imgw_clone = Imgw.clone();
+    draw_max_gradients(&mut imgw_clone);
+
+    let imgw_clone = convert_luma_f32_to_luma_u8(&imgw_clone);
+    //draw_points(&mut Imgw_clone, &X, &P);
+    let _ = imgw_clone.save(format!("img/level_{}_iter_{}.png", level, num_iter));
+}
+
+
 #[allow(non_snake_case)]
 fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec<(u32, u32)>>, level: usize) -> Option<(Params, Vec<(u32, u32)>, f32)> {
     if X.is_none() {
@@ -279,7 +291,9 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
     let mut w: std::fs::File = std::fs::OpenOptions::new().append(true).open("/tmp/ecc.log").unwrap();
     use std::io::Write;
 
-    let ir = get_feature_vector(Ir, &X, true);
+    let normalize_feature_vector = true;
+
+    let ir = get_feature_vector(Ir, &X, normalize_feature_vector);
 
     let mut P = initial_params.clone();
 
@@ -295,25 +309,16 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
 
         // warp into
         let mut Imgw = ImgBufferF::new(Ir.width(), Ir.height());
-
         let h3 = P.get_projection_matrix().expect("Unable to form projection matrix").invert(); // use inverse matrix here
-
         warp_into(&Iw, &h3, Interpolation::Bilinear, [0.0].into(), &mut Imgw);
 
-        if true {
-            let mut imgw_clone = Imgw.clone();
-            draw_max_gradients(&mut imgw_clone);
+        //dump_ecc_intermediate_results(Imgw.clone(), level, num_iter);
 
-            let imgw_clone = convert_luma_f32_to_luma_u8(&imgw_clone);
-            //draw_points(&mut Imgw_clone, &X, &P);
-            let _ = imgw_clone.save(format!("img/level_{}_iter_{}.png", level, num_iter));
-        }
-
-        let iw = get_feature_vector(&Imgw, &X, false);
+        let iw = get_feature_vector(&Imgw, &X, normalize_feature_vector);
 
         let G = calculate_jacobian(&Imgw, &X, &P); // dims: K x N = 1000 x 8
         let GT = G.transpose(); // dims: N x K = 8 x 1000
-        let GT_G = GT.mul(&G); // dims: N x N = 8 x 8, Hessain
+        let GT_G = GT.mul(&G); // dims: N x N = 8 x 8, Hessain . Does Jacobian * JacobianT always give Hessain ?
         let GT_G_inv_GT = (GT_G).pseudo_inverse(0.0000000000001).unwrap() * G.transpose(); // dims: N x K = 8 x 1000
         let PG = G.clone() * GT_G_inv_GT.clone(); // dims: K x K = 1000 x 1000
 
@@ -322,19 +327,12 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
         // PG * PG = G * (GT * G) ^ {-1} * (GT * G) * (GT * G) ^ {-1} * GT
         // PG * PG = G * (GT * G) ^ {-1} * GT = PG => PG is a projection
 
+        // cosine similarity between referent (ir) and warped image (iw)
         let ir_iw = (ir.transpose() * iw.clone())[(0, 0)];
         let ir_pg_iw = (ir.transpose() * PG.clone() * iw.clone())[(0, 0)];
         let iw_pg_iw = (iw.transpose() * PG.clone() * iw.clone())[(0, 0)];
 
         println!("ir mean {}, iw mean {}", ir.mean(), iw.mean());
-
-        {
-            let inc1 = increment1(&ir, &iw, &GT_G_inv_GT, ir_iw, ir_pg_iw, iw_pg_iw);
-            let ir_pg_ir = (ir.transpose() * PG.clone() * ir.clone())[(0, 0)];
-            let inc2 = increment2(&ir, &iw, &GT_G_inv_GT, ir_iw, iw_pg_iw, ir_pg_ir, ir_pg_iw);
-
-            println!("inc1 {:?} inc2 {:?}", inc1, inc2);
-        }
 
         let inc = if ir_iw > ir_pg_iw {
             println!("inc1, {} > {}", ir_iw, ir_pg_iw);
@@ -398,9 +396,8 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
     }
 }
 
-//  increment: coeff * ir - iw
+//  increment1 and increment2 are simmilar: coeff * ir - iw
 //  to 1xN matrix: GT_G_inv_GT * increment
-//
 #[allow(non_snake_case)]
 fn increment1(ir: &FeatureVector, iw: &FeatureVector, GT_G_inv_GT: &DMatrix::<f32>, ir_iw: f32, ir_pg_iw: f32, iw_pg_iw: f32) -> CMatrix {
     GT_G_inv_GT * (((iw.norm() * iw.norm() - iw_pg_iw) / (ir_iw - ir_pg_iw))* ir - iw)
@@ -408,7 +405,7 @@ fn increment1(ir: &FeatureVector, iw: &FeatureVector, GT_G_inv_GT: &DMatrix::<f3
 
 #[allow(non_snake_case)]
 fn increment2(ir: &FeatureVector, iw: &FeatureVector, GT_G_inv_GT: &DMatrix::<f32>, ir_iw: f32, iw_pg_iw: f32, ir_pg_ir: f32, ir_pg_iw: f32) -> CMatrix {
-    let ir_pg_ir = ir_pg_ir;
+    let ir_pg_ir = ir_pg_ir + 0.0000001;
     let lambda1 = (iw_pg_iw / ir_pg_ir).sqrt();
     let lambda2 = (ir_pg_iw - ir_iw) / ir_pg_ir;
 
@@ -690,13 +687,6 @@ fn zero_mean_over_columns(G: &mut DMatrix::<f32>) {
 
 /*
 todos:
-* svd epsilon
-* normalize G - done
-* normalize ir - done
-* form ir - done
-* Image to ImageBuffer - done
-* gradients - done
-* warp image - done
 * Projection - unable to form
 * feature vector - zero mean ? normalized ?
 */
