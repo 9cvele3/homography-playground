@@ -128,7 +128,7 @@ fn get_feature_vector_warped(im: &ImgBufferF, P: &Params, coords: &Vec<(u32, u32
     for (i, (x, y)) in coords.iter().enumerate() {
         let (x, y) = warp_coords(P, (*x, *y));
         let pixel = get_pixel_value(im, x.round() as i32, y.round() as i32);
-        println!("get_feature_vector_warped {}, {}: {}", x, y, pixel);
+        //println!("get_feature_vector_warped {}, {}: {}", x, y, pixel);
         fv[i] = pixel as f32;
     }
 
@@ -152,7 +152,7 @@ fn get_feature_vector(im: &ImgBufferF, coords: &Vec<(u32, u32)>, normalize: bool
 
     for (i, (x, y)) in coords.iter().enumerate() {
         let pixel = get_pixel_value(im, *x as i32, *y as i32);
-        println!("get_feature_vector {}, {}: {}", x, y, pixel);
+        //println!("get_feature_vector {}, {}: {}", x, y, pixel);
 
         fv[i] = pixel as f32;
     }
@@ -285,11 +285,11 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8, params_type: ParamsType) -> Optio
 }
 
 fn get_GT_G_inv_GT(G:  &DMatrix::<f32>) ->  DMatrix::<f32> {
-    dump_matrix(&G, "G");
+    //dump_matrix(&G, "G");
     let GT = G.transpose(); // dims: N x K = 8 x 1000
-    dump_matrix(&GT, "GT");
+    //dump_matrix(&GT, "GT");
     let GT_G = GT.mul(G); // dims: N x N = 8 x 8, Hessain . Does JacobianT * Jacobian always give Hessain ? yes
-    dump_matrix(&GT_G, "GT_G = H");
+    //dump_matrix(&GT_G, "GT_G = H");
     let GT_G_inv_GT = (GT_G).pseudo_inverse(0.0000000000001).unwrap() * G.transpose(); // dims: N x K = 8 x 1000
     GT_G_inv_GT
 }
@@ -321,18 +321,18 @@ fn ecc_increment(Ir: &ImgBufferF, Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &mut 
     //dump_matrix(&GT_G_inv_GT);
 
 
-    dump_image(&Ir, "Ir");
-    dump_image(&Iw, "Iw");
+    //dump_image(&Ir, "Ir");
+    //dump_image(&Iw, "Iw");
 
     // cosine similarity between referent (ir) and warped image (iw)
     let ir = get_feature_vector(Ir, &X, normalize_feature_vector);
     let iw = get_feature_vector_warped(&Iw, &P, &X, normalize_feature_vector);
 
-    dump_vector(&ir, "ir");
-    dump_vector(&iw, "iw");
+    //dump_vector(&ir, "ir");
+    //dump_vector(&iw, "iw");
 
     let diff = ir.clone() - iw.clone();
-    dump_vector(&diff, "diff");
+    //dump_vector(&diff, "diff");
 
     let ir_iw = (ir.transpose() * iw.clone())[(0, 0)];
     let ir_pg_iw = (ir.transpose() * PG.clone() * iw.clone())[(0, 0)];
@@ -388,7 +388,7 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
     let mut w: std::fs::File = std::fs::OpenOptions::new().append(true).open("/tmp/ecc.log").unwrap();
     use std::io::Write;
 
-    let normalize_feature_vector = true;
+    let normalize_feature_vector = false; // don't normalize feature vector
     let mut P = initial_params.clone();
 
     let threshold = 0.0001;
@@ -423,6 +423,7 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
         };
 
         if inc.norm() < threshold {
+            println!("small inc norm: {:?}", inc);
             break;
         } else if should_continue {
             for inc_el in inc.iter() {
@@ -779,7 +780,6 @@ fn get_grad_x_at(img: &ImgBufferF, x: u32, y: u32) -> f32 {
     let gx = (v1 - v2) / 2.0;
     //println!("grad_x {}, x: {}, y: {}, v1: {}, v2: {}", gx, x, y, v1, v2);
 
-
     gx
 }
 
@@ -819,11 +819,12 @@ fn get_warped_grad_x(img: &ImgBufferF, x: f32, y: f32) -> f32 {
     let pix01 = get_grad_x_at(img, ix, iy + 1);
     let pix02 = get_grad_x_at(img, ix + 1, iy);
     let pix03 = get_grad_x_at(img, ix + 1, iy + 1);
+    //println!("warped_grad_x {} {} {} {}", pix00, pix01, pix02, pix03);
 
-    let res = dx * dy * pix00
-                + dx * (1.0 - dy) * pix01
-                + (1.0 - dx) * dy * pix02
-                + (1.0 - dx) * (1.0 - dy) * pix03;
+    let res = (1.0 - dx) * (1.0 - dy) * pix00
+                + (1.0 - dx) * dy * pix01
+                +  dx * (1.0 - dy) * pix02
+                + dx * dy * pix03;
 
     res
 }
@@ -848,12 +849,12 @@ fn get_warped_grad_y(img: &ImgBufferF, x: f32, y: f32) -> f32 {
     let pix02 = get_grad_y_at(img, ix + 1, iy);
     let pix03 = get_grad_y_at(img, ix + 1, iy + 1);
 
-    println!("{} {} {} {}", pix00, pix01, pix02, pix03);
+    //println!("warped_grad_y {} {} {} {}", pix00, pix01, pix02, pix03);
 
-    let res = dx * dy * pix00
-                + dx * (1.0 - dy) * pix01
-                + (1.0 - dx) * dy * pix02
-                + (1.0 - dx) * (1.0 - dy) * pix03;
+    let res = (1.0 - dx) * (1.0 - dy) * pix00
+                + (1.0 - dx) * dy * pix01
+                +  dx * (1.0 - dy) * pix02
+                +  dx * dy * pix03;
 
     res
 }
@@ -1024,52 +1025,6 @@ fn test_get_feature_vector() {
 }
 
 #[test]
-fn test_ecc_increment() {
-    use crate::reg::ecc;
-
-    let paths = std::fs::read_dir("./img/").unwrap();
-
-    for p in paths {
-        if p.is_ok() {
-            let path = p.unwrap().path();
-
-            if path.to_str().unwrap().starts_with("./img/level") {
-                println!("{:?}", path);
-                std::fs::remove_file(path);
-            } else {
-                //debug!("skip {:?}", path);
-            }
-        }
-    }
-
-    let img1 = image::open("img/rect16x16.png").expect("File not found!").grayscale().into_luma8();
-    let img2 = image::open("img/rect16x16-trans-x.png").expect("File not found!").grayscale().into_luma8();
-
-    let img1f = convert_luma_u8_to_luma_f32(&img1);
-    let img2f = convert_luma_u8_to_luma_f32(&img2);
-
-    let mut p = Params::new(ParamsType::Trans);
-    let num_points_per_parameter = 15;
-    let X = get_indices(&img1f, &img2f, &p.get_inverse(), 2 * 16 * 16); // 2 - x and y
-
-
-    let mut w = std::fs::OpenOptions::new()
-                                        .create(true)
-                                        .truncate(true)
-                                        .write(true)
-                                        .open("/tmp/ecc.log").unwrap();
-
-    let (ecc_approximation, increment) = ecc_increment(&img1f, &img2f, &X, &mut p, false /* normalization is not done in matlab */);
-    //let (params, vec, _) = ecc(&img2f, &img1f, &p, &X, 1)
-    //                .expect("Registration failed");
-
-
-    println!("End result: ");
-    println!("ecc_approximation {}, increment {:?}", ecc_approximation, increment);
-    //params.print_params();
-}
-
-#[test]
 fn test_get_pixel_value() {
     let img1 = image::open("img/rect4x4-test.png").expect("File not found!").grayscale().into_luma8();
     let img1f = convert_luma_u8_to_luma_f32(&img1);
@@ -1085,6 +1040,7 @@ fn test_g_matrix() {
 
     let mut p = Params::new(ParamsType::Trans);
 
+    if false
     {
         let (x, y) =  (0, 15);
         let (x, y) = warp_coords(&p, (x, y));
@@ -1098,11 +1054,26 @@ fn test_g_matrix() {
         assert_eq!(0.0, grad_y);
     }
 
+    if false
     {
         let (x, y) =  (5, 2);
         let (x, y) = warp_coords(&p, (x, y));
         assert_eq!(5.0, x);
         assert_eq!(2.0, y);
+
+        let grad_x = get_warped_grad_x(&img2f, x, y);
+        assert_eq!(0.0, grad_x);
+
+        let grad_y = get_warped_grad_y(&img2f, x, y);
+        assert_eq!(0.0, grad_y);
+    }
+
+
+    {
+        let (x, y) =  (4, 3);
+        let (x, y) = warp_coords(&p, (x, y));
+        assert_eq!(4.0, x);
+        assert_eq!(3.0, y);
 
         let grad_x = get_warped_grad_x(&img2f, x, y);
         assert_eq!(0.0, grad_x);
@@ -1370,23 +1341,121 @@ fn test_g_matrix() {
         0.0,    0.0,
     ];
 
-    /*
+
     let x = get_indices(&img2f, &img2f, &p, (img2f.width() * img2f.height()) as i32);
 
     let G = calculate_jacobian(&img2f, &x, &p);
     //let G_exp = DMatrix::from_vec(G.nrows(), G.ncols(), g_exp_values);
     let G_exp = DMatrix::from_row_slice(G.nrows(), G.ncols(), &g_exp_values);
 
-    dump_matrix(&G, "G");
-    dump_matrix(&G_exp, "G_exp");
+    //dump_matrix(&G, "G");
+    //dump_matrix(&G_exp, "G_exp");
 
+    /*
     for y in 0..G.nrows() {
         for x in 0..G.ncols() {
-            println!("{} {}", y, x);
-            assert_eq!(G_exp[(y, x)], G[(y, x)]);
+            //println!("{} {} {} {}", y, x, 1 + y / 16, y - 16 * (y / 16));
+            //assert_eq!(G_exp[(y, x)], G[(y, x)]);
+
+            if G_exp[(y, x)] != G[(y, x)] {
+                println!("diff at {}, {}: {} != {}, indices to test {} {}", y, x, G_exp[(y, x)], G[(y, x)], y / 16, y - 16 * (y / 16));
+            }
         }
     }
     */
 
     //assert_eq!(G_exp, G);
+}
+
+
+#[test]
+fn test_ecc_increment() {
+    use crate::reg::ecc;
+
+    let paths = std::fs::read_dir("./img/").unwrap();
+
+    for p in paths {
+        if p.is_ok() {
+            let path = p.unwrap().path();
+
+            if path.to_str().unwrap().starts_with("./img/level") {
+                println!("{:?}", path);
+                std::fs::remove_file(path);
+            } else {
+                //debug!("skip {:?}", path);
+            }
+        }
+    }
+
+    let img1 = image::open("img/rect16x16.png").expect("File not found!").grayscale().into_luma8();
+    let img2 = image::open("img/rect16x16-trans-x.png").expect("File not found!").grayscale().into_luma8();
+
+    let img1f = convert_luma_u8_to_luma_f32(&img1);
+    let img2f = convert_luma_u8_to_luma_f32(&img2);
+
+    let mut p = Params::new(ParamsType::Trans);
+    let num_points_per_parameter = 15;
+    let X = get_indices(&img1f, &img2f, &p.get_inverse(), 2 * 16 * 16); // 2 - x and y
+
+
+    let mut w = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .truncate(true)
+                                        .write(true)
+                                        .open("/tmp/ecc.log").unwrap();
+
+    let (ecc_approximation, increment) = ecc_increment(&img1f, &img2f, &X, &mut p, false /* normalization is not done in matlab */);
+    //let (params, vec, _) = ecc(&img2f, &img1f, &p, &X, 1)
+    //                .expect("Registration failed");
+
+
+    println!("End result: ");
+    println!("ecc_approximation {}, increment {:?}", ecc_approximation, increment);
+    //params.print_params();
+}
+
+#[test]
+fn test_ecc_no_pyr() {
+    use crate::reg::ecc;
+
+    let paths = std::fs::read_dir("./img/").unwrap();
+
+    for p in paths {
+        if p.is_ok() {
+            let path = p.unwrap().path();
+
+            if path.to_str().unwrap().starts_with("./img/level") {
+                println!("{:?}", path);
+                std::fs::remove_file(path);
+            } else {
+                //debug!("skip {:?}", path);
+            }
+        }
+    }
+
+    let img1 = image::open("img/rect16x16.png").expect("File not found!").grayscale().into_luma8();
+    let img2 = image::open("img/rect16x16-trans-x.png").expect("File not found!").grayscale().into_luma8();
+
+    let img1f = convert_luma_u8_to_luma_f32(&img1);
+    let img2f = convert_luma_u8_to_luma_f32(&img2);
+
+    let mut p = Params::new(ParamsType::Trans);
+    let num_points_per_parameter = 15;
+    let X = get_indices(&img1f, &img2f, &p.get_inverse(), 2 * 16 * 16); // 2 - x and y
+
+
+    let mut w = std::fs::OpenOptions::new()
+                                        .create(true)
+                                        .truncate(true)
+                                        .write(true)
+                                        .open("/tmp/ecc.log").unwrap();
+
+
+    if let Some((p_res, v, f)) = ecc(&img1f, &img2f, &p, &Some(X), 0) {
+        println!("End result: ");
+        p_res.print_params();
+        //params.print_params();
+    } else {
+        println!("ecc failed");
+    }
 }

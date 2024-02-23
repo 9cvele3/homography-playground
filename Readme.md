@@ -48,3 +48,77 @@ Later, you can just use the files from `dist` directory.
 bench - at the root of the project
 
 test - point registration
+
+test with 8x8 matrices - but with overlap (no too large shift)
+
+test with 2x2 matrices - all pixels match
+
+test with 4x4 matrices - all pixels match
+
+test with 8x8 matrices - all pixels match
+
+test with 16x16 matrices - gradients
+
+# Test example
+
+
+
+
+    // N = 0
+    {
+        let dphi_ofx1_per_dp0 = 1.0;
+        let dphi_ofx2_per_dp0 = 0.0;
+        let el: f32 = dI_per_dy1 * dphi_ofx1_per_dp0 + dI_per_dy2 * dphi_ofx2_per_dp0;
+        G[(k, 0)] = el;
+    }
+
+    // N = 1
+    {
+        let dphi_ofx1_per_dp1 = 0.0;
+        let dphi_ofx2_per_dp1 = 1.0;
+        let el = dI_per_dy1 * dphi_ofx1_per_dp1 + dI_per_dy2 * dphi_ofx2_per_dp1;
+        G[(k, 1)] = el;
+    }
+
+
+
+# Normalization
+
+Normalization is not used in matlab code, only zero mean
+G matrix has larger values than in Matlab code
+Hessian matrix has larger values than in Matlab code
+Hessian is not diagonal, but diagonal elements should be larger than side elements.
+Hessian inverse then has small values, that result in small p increments
+
+No zero mean for matrix G. It is not done in matlab.
+
+Only using unique indices pairs, to get proper Hessain matrix.
+
+Use gradient from Octave.
+
+# Trans, Trz should match up to a point
+
+Other uses of Hessain
+
+# ECC Registration Performance
+Rust - nalgebra performance ?
+
+Maybe to use BLAS (https://docs.rs/blas/latest/blas/) ?
+
+Looks like the diff is transposed
+
+Octave reshape vs Matlab reshape
+
+a b c
+d e f
+
+a b
+c d
+e f
+
+a d
+b e
+c f
+# TODO
+
+* Add `ecc` lib to this project

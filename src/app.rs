@@ -469,16 +469,14 @@ impl AppData {
 
         let texture = ctx.load_texture(texid, img.clone(), egui::TextureFilter::Linear);
 
-        /*
         if let Some(rect) = rect {
             let imgw = egui::Image::new(&texture, out_size);
             ui.put(*rect, imgw);
         } else {
             *rect = Some(ui.image(&texture, out_size).rect);
         }
-        */
 
-        if self.should_display_fft() {
+        if false && self.should_display_fft() {
             let fft_img = fft_2D(&img, &self.fft);
             let texture = ctx.load_texture("fft", fft_img, egui::TextureFilter::Linear);
             ui.image(&texture, out_size);

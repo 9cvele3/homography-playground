@@ -49,7 +49,7 @@ fn downscale(I: &ImgBufferF) -> ImgBufferF {
 pub fn create_pyramid(I: &ImgBufferU8) -> Vec<ImgBufferF> {
     let wf = I.width() as f32;
     let hf = I.height() as f32;
-    let num_levels = std::cmp::min(5, std::cmp::min(wf.log2() as usize, hf.log2() as usize));
+    let num_levels = std::cmp::min(5, std::cmp::min(wf.log2() as usize, hf.log2() as usize) - 1);
 
     let mut res = vec![];
     res.push(convert_luma_u8_to_luma_f32(I));
