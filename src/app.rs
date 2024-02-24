@@ -2,6 +2,7 @@ use eframe::egui;
 use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
 use egui::ColorImage;
 use puffin_egui::puffin;
+use std::io::{BufRead, BufReader, Cursor, Read, Seek};
 
 fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection, alpha: u8) -> egui::ColorImage {
     puffin::profile_function!();
@@ -54,7 +55,19 @@ fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection, al
 }
 
 fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, image::ImageError> {
-    let image = image::io::Reader::open(path)?.decode()?;
+    let mut reader = image::io::Reader::open(path)?;
+    load_egui_image_from_image_reader(reader)
+}
+
+fn load_image_from_bytes(data: &[u8], name: &str) -> Result<egui::ColorImage, image::ImageError> {
+    println!("loading from {} bytes", data.len());
+    let format = image::ImageFormat::from_path(name)?;
+    let mut reader = image::io::Reader::with_format(Cursor::new(data), format);
+    load_egui_image_from_image_reader(reader)
+}
+
+fn load_egui_image_from_image_reader<R: Read + BufRead + Seek>(reader: image::io::Reader<R>) -> Result<egui::ColorImage, image::ImageError> {
+    let image = reader.decode()?;
     let size = [image.width() as _, image.height() as _];
     let image_buffer = image.to_rgba8();
     let px = image_buffer.as_flat_samples();
@@ -175,8 +188,8 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 selected_text = "Scale";
 
                 ui.label("Scale");
-                ui.add(egui::Slider::new(sx, 0.00001..=5.0));
-                ui.add(egui::Slider::new(sy, 0.00001..=5.0));
+                ui.add(egui::Slider::new(sx, 0.00001..=5.0)).on_hover_text("sx");
+                ui.add(egui::Slider::new(sy, 0.00001..=5.0)).on_hover_text("sy");
                 ui.checkbox(isotropic, "isotropic".to_string());
 
                 if *isotropic {
@@ -187,16 +200,16 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 selected_text = "Trans";
 
                 ui.label("Trans");
-                ui.add(egui::Slider::new(tx, -1000.0..=1000.0));
-                ui.add(egui::Slider::new(ty, -1000.0..=1000.0));
+                ui.add(egui::Slider::new(tx, -1000.0..=1000.0)).on_hover_text("tx");
+                ui.add(egui::Slider::new(ty, -1000.0..=1000.0)).on_hover_text("ty");
             },
             Homography::P { h31, h32, h33 } => {
                 selected_text = "Proj";
 
                 ui.label("Proj");
-                ui.add(egui::Slider::new(h31, -0.01..=0.01));
-                ui.add(egui::Slider::new(h32, -0.01..=0.01));
-                ui.add(egui::Slider::new(h33, -5.0..=5.0));
+                ui.add(egui::Slider::new(h31, -0.01..=0.01)).on_hover_text("h20");
+                ui.add(egui::Slider::new(h32, -0.01..=0.01)).on_hover_text("h21");
+                ui.add(egui::Slider::new(h33, -5.0..=5.0)).on_hover_text("h22");
             }
         }
 
@@ -286,28 +299,54 @@ impl AppData {
     }
 
     fn files_dropped(&mut self, files: &[egui::DroppedFile]) {
-        if !files.is_empty() {
-            let mut todo_files: Vec<_> = files.iter()
-                .filter_map(|f| f.clone().path)
-                .map(|f| f.to_path_buf())
+            let mut images : Vec<SingleImage> = files.into_iter()
+                .filter_map(|df| {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        if df.path.is_some() {
+                            if let Ok(color_image) = load_image_from_path(&df.path.as_ref().unwrap().to_path_buf()) {
+                                let h3s = vec![UIMatrix::new(); 10];
+
+                                let si = SingleImage {
+                                    color_image,
+                                    alpha: 255,
+                                    h3s,
+                                };
+
+                                return Some(si);
+                            }
+                        }
+                    }
+
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        tracing::debug!("Loading image");
+
+                        if df.bytes.is_some() {
+                            match load_image_from_bytes(&df.bytes.as_ref().unwrap(), &df.name) {
+                                Ok(color_image) => {
+                                    let h3s = vec![UIMatrix::new(); 10];
+
+                                    let si = SingleImage {
+                                        color_image,
+                                        alpha: 255,
+                                        h3s,
+                                    };
+
+                                    return Some(si);
+                                },
+                                Err(e) => {
+                                    tracing::error!("Error while loading image: {:?}", e);
+                                }
+                            }
+                        }
+                    }
+
+                    return None
+                })
                 .collect();
 
-            todo_files.sort();
-
-            for f in todo_files.iter() {
-                if let Ok(color_image) = load_image_from_path(&f) {
-                    let h3s = vec![UIMatrix::new(); 10];
-
-                    let si = SingleImage {
-                        color_image,
-                        alpha: 255,
-                        h3s,
-                    };
-
-                    self.images.push(si);
-                }
-            }
-        }
+            self.images.append(&mut images);
     }
 
     fn get_central_image_mut(&mut self) -> &mut SingleImage {
@@ -332,7 +371,7 @@ impl AppData {
 
                     //ui.image(&texture, out_size);
                     //ui.add(egui::DragValue::new(&mut img.alpha).speed(1));
-                    ui.add(egui::Slider::new(&mut img.alpha, 0..=255));
+                    ui.add(egui::Slider::new(&mut img.alpha, 0..=255)).on_hover_text("transparency (alpha)");
                 });
             }
 
@@ -408,13 +447,15 @@ impl AppData {
     }
 
     fn display_out_size_factor(&mut self, ui: &mut egui::Ui) {
-        ui.checkbox(&mut self.fill_canvas, "Fill canvas".to_string());
+        ui.checkbox(&mut self.fill_canvas, "Fill canvas".to_string())
+            .on_hover_text("Center the image and fill the surrounding area with NaNs");
 
         if self.fill_canvas {
             ui.add(egui::Slider::new(&mut self.out_size_factor, 0.5..=1.0).text("out size factor (change if slow performance)"));
         }
 
-        ui.checkbox(&mut self.blend_all, "Blend all".to_string());
+        ui.checkbox(&mut self.blend_all, "Blend all".to_string())
+            .on_hover_text("Blend all images into one using transparency (alpha) values");
     }
 }
 
@@ -426,9 +467,11 @@ impl eframe::App for AppData {
             puffin_egui::profiler_window(ctx);
         }
 
-        self.files_dropped(&ctx.input().raw.dropped_files[..]);
+
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            self.files_dropped(&ctx.input().raw.dropped_files[..]);
+
             ui.vertical(|ui|{
                 self.display_thumbs(ctx, ui);
                 self.display_homographies_panel(ui);
