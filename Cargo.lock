@@ -1007,6 +1007,7 @@ dependencies = [
  "image",
  "imageproc",
  "puffin_egui",
+ "tracing",
  "tracing-subscriber",
  "tracing-wasm",
 ]

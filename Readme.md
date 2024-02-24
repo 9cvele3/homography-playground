@@ -22,7 +22,8 @@ Later, you can just use the files from `dist` directory.
 
 * run `cargo build --release` to build x86 app and generate `Cargo.lock`
 
-* edit `Cargo.lock` to avoid later problems when compiling to wasm: `failed to verify the checksum of ndk-sys v0.4.0`. Make the change based on this diff: https://github.com/alacritty/alacritty/pull/6665/files
+* edit `Cargo.lock` to avoid later problems when compiling to wasm: `failed to verify the checksum of ndk-sys v0.4.0`. 
+Make the change based on this diff: https://github.com/alacritty/alacritty/pull/6665/files
 
 * `cargo install trunk`
 
