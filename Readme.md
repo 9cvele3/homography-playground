@@ -2,6 +2,8 @@
 
 Interactive homography playground.
 
+![](homography-playground.gif)
+
 ## Build for wasm
 
 This is based on https://benw.is/posts/better-desktop-web-apps

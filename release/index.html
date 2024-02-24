@@ -4,15 +4,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
 
-    <!-- change this to your project name -->
     <title>Homography Playground</title>
 
     <!-- config for our rust wasm binary. go to https://trunkrs.dev/assets/#rust for more customization -->
-    <script type="module">import init from '/homography-playground-be43a40703fcd74e.js';init('/homography-playground-be43a40703fcd74e_bg.wasm');</script>
+    <script type="module">import init from '/homography-playground-32873b2400225914.js';init('/homography-playground-32873b2400225914_bg.wasm');</script>
     <!-- this is the base url relative to which other urls will be constructed. trunk will insert this from the public-url option -->
     <base href="/">
-
-    
 
     <style>
         html {
@@ -101,24 +98,13 @@
 
     </style>
 
-<link rel="preload" href="/homography-playground-be43a40703fcd74e_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
-<link rel="modulepreload" href="/homography-playground-be43a40703fcd74e.js"></head>
+<link rel="preload" href="/homography-playground-32873b2400225914_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
+<link rel="modulepreload" href="/homography-playground-32873b2400225914.js"></head>
 
 <body>
     <!-- The WASM code will resize the canvas dynamically -->
     <!-- the id is hardcoded in main.rs . so, make sure both match. -->
     <canvas id="the_canvas_id"></canvas>
-
-    <!--Register Service Worker. this will cache the wasm / js scripts for offline use (for PWA functionality). -->
-    <!-- Force refresh (Ctrl + F5) to load the latest files instead of cached files  -->
-    <script>
-        // We disable caching during development so that we always view the latest version.
-        if ('serviceWorker' in navigator && window.location.hash !== "#dev") {
-            window.addEventListener('load', function () {
-                navigator.serviceWorker.register('sw.js');
-            });
-        }
-    </script>
 
 
 
