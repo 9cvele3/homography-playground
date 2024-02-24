@@ -2,6 +2,8 @@
 
 Interactive homography playground.
 
+You can play with it here: https://9cvele3.github.io/homography-playground
+
 ![](homography-playground.gif)
 
 ## Build for wasm
