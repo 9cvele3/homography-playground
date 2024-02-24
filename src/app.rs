@@ -188,8 +188,8 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 selected_text = "Scale";
 
                 ui.label("Scale");
-                ui.add(egui::Slider::new(sx, 0.00001..=5.0));
-                ui.add(egui::Slider::new(sy, 0.00001..=5.0));
+                ui.add(egui::Slider::new(sx, 0.00001..=5.0)).on_hover_text("sx");
+                ui.add(egui::Slider::new(sy, 0.00001..=5.0)).on_hover_text("sy");
                 ui.checkbox(isotropic, "isotropic".to_string());
 
                 if *isotropic {
@@ -200,16 +200,16 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 selected_text = "Trans";
 
                 ui.label("Trans");
-                ui.add(egui::Slider::new(tx, -1000.0..=1000.0));
-                ui.add(egui::Slider::new(ty, -1000.0..=1000.0));
+                ui.add(egui::Slider::new(tx, -1000.0..=1000.0)).on_hover_text("tx");
+                ui.add(egui::Slider::new(ty, -1000.0..=1000.0)).on_hover_text("ty");
             },
             Homography::P { h31, h32, h33 } => {
                 selected_text = "Proj";
 
                 ui.label("Proj");
-                ui.add(egui::Slider::new(h31, -0.01..=0.01));
-                ui.add(egui::Slider::new(h32, -0.01..=0.01));
-                ui.add(egui::Slider::new(h33, -5.0..=5.0));
+                ui.add(egui::Slider::new(h31, -0.01..=0.01)).on_hover_text("h20");
+                ui.add(egui::Slider::new(h32, -0.01..=0.01)).on_hover_text("h21");
+                ui.add(egui::Slider::new(h33, -5.0..=5.0)).on_hover_text("h22");
             }
         }
 
@@ -371,7 +371,7 @@ impl AppData {
 
                     //ui.image(&texture, out_size);
                     //ui.add(egui::DragValue::new(&mut img.alpha).speed(1));
-                    ui.add(egui::Slider::new(&mut img.alpha, 0..=255));
+                    ui.add(egui::Slider::new(&mut img.alpha, 0..=255)).on_hover_text("transparency (alpha)");
                 });
             }
 
@@ -447,13 +447,15 @@ impl AppData {
     }
 
     fn display_out_size_factor(&mut self, ui: &mut egui::Ui) {
-        ui.checkbox(&mut self.fill_canvas, "Fill canvas".to_string());
+        ui.checkbox(&mut self.fill_canvas, "Fill canvas".to_string())
+            .on_hover_text("Center the image and fill the surrounding area with NaNs");
 
         if self.fill_canvas {
             ui.add(egui::Slider::new(&mut self.out_size_factor, 0.5..=1.0).text("out size factor (change if slow performance)"));
         }
 
-        ui.checkbox(&mut self.blend_all, "Blend all".to_string());
+        ui.checkbox(&mut self.blend_all, "Blend all".to_string())
+            .on_hover_text("Blend all images into one using transparency (alpha) values");
     }
 }
 
