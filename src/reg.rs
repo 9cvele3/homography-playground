@@ -15,14 +15,14 @@ type FeatureVector = DVector::<f32>;//SVector::<f32, K>;
 type CMatrix = nalgebra::Matrix<f32, Dynamic, Const<1>, VecStorage<f32, Dynamic, Const<1>>>;
 
 #[derive(Clone)]
-enum ParamsType {
+pub enum ParamsType {
     Trans,
     Trz,
     Proj,
 }
 
 #[derive(Clone)]
-struct Params {
+pub struct Params {
     params: DVector::<f32>,
     ptype: ParamsType,
 }
@@ -72,14 +72,14 @@ fn test_invert() {
 }
 
 impl Params {
-    fn new(ptype: ParamsType) -> Params {
+    pub fn new(ptype: ParamsType) -> Params {
         Params {
             params: DVector::<f32>::from_column_slice(&vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]),
             ptype
         }
     }
 
-    fn get_inverse(&self) -> Params {
+    pub fn get_inverse(&self) -> Params {
         let params = invert(&self.params);
 
         Params {
@@ -88,11 +88,11 @@ impl Params {
         }
     }
 
-    fn get_projection_matrix(&self) -> Option<Projection> {
+    pub fn get_projection_matrix(&self) -> Option<Projection> {
         Projection::from_matrix([self.params[0], self.params[1], self.params[2], self.params[3], self.params[4], self.params[5], self.params[6], self.params[7], self.params[8]])
     }
 
-    fn update(&mut self, inc: &DVector::<f32>, dump_factor: f32) {
+    pub fn update(&mut self, inc: &DVector::<f32>, dump_factor: f32) {
         match self.ptype {
             ParamsType::Trans => {
                 self.params[2] += inc[0] * dump_factor;
@@ -112,7 +112,7 @@ impl Params {
 
     }
 
-    fn double_translation_params(&mut self) {
+    pub fn double_translation_params(&mut self) {
         self.params[2] *= 2.0;
         self.params[5] *= 2.0;
     }
@@ -205,7 +205,7 @@ fn get_max_gradients(img: &ImgBufferF, num_points: u32) -> Vec<(u32, u32)> {
     res
 }
 
-
+/*
 #[allow(non_snake_case)]
 fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8, params_type: ParamsType) -> Option<Projection> {
     let mut w = std::fs::OpenOptions::new()
@@ -240,7 +240,7 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8, params_type: ParamsType) -> Optio
         let res2 = ecc(layer_r, layer_w, &initial_params, &points, level);
 
         match (res1, res2) {
-            (Some((params1, X1, ecc1)), Some((params2, X2, ecc2))) => {
+            (Some(params1), Some(params2)) => {
                 if ecc1 >= ecc2 {
                     initial_params = params1.clone();
                     points = Some(X1);
@@ -283,6 +283,7 @@ fn ecc_pyr(Ir: &ImgBufferU8, Iw: &ImgBufferU8, params_type: ParamsType) -> Optio
 
     initial_params.get_projection_matrix()
 }
+*/
 
 fn get_GT_G_inv_GT(G:  &DMatrix::<f32>) ->  DMatrix::<f32> {
     //dump_matrix(&G, "G");
@@ -377,8 +378,123 @@ fn increment2(ir: &FeatureVector, iw: &FeatureVector, GT_G_inv_GT: &DMatrix::<f3
     GT_G_inv_GT * (lambda * ir - iw)
 }
 
+struct ECCPyr<'a> {
+    src_pyramid: Vec<ImgBufferF>,
+    dst_pyramid: Vec<ImgBufferF>,
+    level: usize,
+    params: Option<Params>,
+    num_points: u32,
+    ecc_impl: Option<ECCImpl<'a>>,
+}
+
+impl<'a> ECCPyr<'a>
+{
+    fn new(src: ImgBufferU8, dst: ImgBufferU8) -> Self {
+        let src_pyramid = create_pyramid(&src);
+        let dst_pyramid = create_pyramid(&dst);
+        let params = Some(Params::new(ParamsType::Trz));
+
+        Self {
+            src_pyramid,
+            dst_pyramid,
+            level: 0,
+            params,
+            num_points: 15,
+            ecc_impl: None,
+        }
+    }
+
+    fn tick(&'a mut self) -> Option<Params> {
+        assert!(self.src_pyramid.len() == self.dst_pyramid.len());
+
+        let done = (self.level >= self.src_pyramid.len() && self.ecc_impl.is_some() && self.ecc_impl.as_ref().unwrap().is_done()) || self.params.is_none();
+
+        if done {
+            return self.params.clone();
+        }
+
+        if self.ecc_impl.is_none() || self.ecc_impl.as_ref().unwrap().is_done() {
+            self.params.as_mut().unwrap().double_translation_params();
+            let ind = self.src_pyramid.len() - 1 - self.level;
+            let x = get_max_gradients(&self.src_pyramid[ind], self.num_points);
+            self.ecc_impl = Some(ECCImpl::new(&self.src_pyramid[ind], &self.dst_pyramid[ind], x, self.params.as_ref().unwrap()));
+            self.level += 1;
+        }
+
+        self.params = self.ecc_impl.as_mut().unwrap().tick();
+        self.params.clone()
+    }
+
+    fn get_progress() {
+    }
+}
+
+struct ECCImpl<'a> {
+    ir: &'a ImgBufferF,
+    iw: &'a ImgBufferF,
+    x: Vec<(u32, u32)>,
+    ecc_coeff_max: f32,
+    params: Params,
+    params_best: Option<Params>,
+    num_iter: u32,
+    done: bool,
+}
+
+impl<'a> ECCImpl<'a> {
+    fn new(ir: &'a ImgBufferF, iw: &'a ImgBufferF, x: Vec<(u32, u32)>, params: &Params) -> ECCImpl<'a> {
+        ECCImpl {
+            ir,
+            iw,
+            x,
+            ecc_coeff_max: -1000.0,
+            params: params.clone(),
+            params_best: None,
+            num_iter: 0,
+            done: false,
+        }
+    }
+
+    fn is_done(&self) -> bool {
+        self.done
+    }
+
+    fn tick(&mut self) -> Option<Params> {
+        if self.done {
+            return self.params_best.clone();
+        }
+
+        let normalize_feature_vector = false; // don't normalize feature vector. TODO: remove this parameter
+        let (ecc_coeff_approximation, inc) = ecc_increment(self.ir, self.iw, &self.x, &mut self.params, normalize_feature_vector);
+
+        let mut last_is_largest = false;
+
+        if ecc_coeff_approximation < self.ecc_coeff_max {
+            last_is_largest = false;
+            println!("no improvement");
+
+        } else {
+            self.ecc_coeff_max = ecc_coeff_approximation;
+            last_is_largest = true;
+            self.params.update(&inc, 1.0);
+            self.params_best = Some(self.params.clone());
+        }
+
+        let should_continue = if last_is_largest {
+            self.num_iter < 15
+        } else {
+            self.num_iter < 5
+        };
+
+        let threshold = 0.00001;
+        self.done = should_continue && inc.norm() < threshold;
+
+        self.num_iter += 1;
+        self.params_best.clone()
+    }
+}
+
 #[allow(non_snake_case)]
-fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec<(u32, u32)>>, level: usize) -> Option<(Params, Vec<(u32, u32)>, f32)> {
+fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec<(u32, u32)>>, level: usize) -> Option<Params> {
     if X.is_none() {
         return None;
     }
@@ -388,64 +504,20 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
     let mut w: std::fs::File = std::fs::OpenOptions::new().append(true).open("/tmp/ecc.log").unwrap();
     use std::io::Write;
 
-    let normalize_feature_vector = false; // don't normalize feature vector
-    let mut P = initial_params.clone();
-
-    let threshold = 0.0001;
-    let max_num_iter = 15;
-    let mut num_iter = 0;
-    let mut ecc_coeff_max = -1000.0;
-    let mut params_best = None;
-    let mut last_is_largest = false;
+    let mut ecc_impl = ECCImpl::new(Ir, Iw, X.clone(), initial_params);
 
     loop {
-        println!("##########################\niteration {}", num_iter);
-        let (ecc_coeff_approximaiton, inc) = ecc_increment(Ir, Iw, X, &mut P, normalize_feature_vector);
+        ecc_impl.tick();
 
-        if ecc_coeff_approximaiton < ecc_coeff_max {
-            last_is_largest = false;
-            println!("no improvement");
-
-        } else {
-            ecc_coeff_max = ecc_coeff_approximaiton;
-            last_is_largest = true;
-            P.update(&inc, 1.0);
-            params_best = Some(P.clone());
-        }
-
-        //println!("ecc_coeff: {}, ecc_coeff_approximation: {}, ecc_coeff_max: {}", ecc_coeff, ecc_coeff_approximaiton, ecc_coeff_max);
-        writeln!(&mut w, "{}, {}, {}", ecc_coeff_approximaiton, P.params[2], P.params[5]).unwrap();
-
-        let should_continue = if last_is_largest {
-            num_iter < max_num_iter
-        } else {
-            num_iter < 15
-        };
-
-        if inc.norm() < threshold {
-            println!("small inc norm: {:?}", inc);
-            break;
-        } else if should_continue {
-            for inc_el in inc.iter() {
-                println!("inc el {}", inc_el);
-            }
-
-            P.print_params();
-
-            num_iter += 1;
-        } else {
+        if ecc_impl.is_done() {
             break;
         }
     }
 
-    writeln!(&mut w, "{}", ecc_coeff_max).unwrap();
-    writeln!(&mut w, "{}", 0).unwrap();
+    // writeln!(&mut w, "{}", ecc_coeff_max).unwrap();
+    // writeln!(&mut w, "{}", 0).unwrap();
 
-    if params_best.is_some() {
-        Some((params_best.unwrap(), X.clone(), ecc_coeff_max))
-    } else {
-        None
-    }
+    ecc_impl.tick()
 }
 
 fn calculate_jacobian(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) -> Jacobian {
@@ -1366,7 +1438,6 @@ fn test_g_matrix() {
 
     //assert_eq!(G_exp, G);
 }
-
 
 #[test]
 fn test_ecc_increment() {

@@ -3,7 +3,7 @@ use imageproc::geometric_transformations::{Projection, warp_into, Interpolation}
 use egui::ColorImage;
 use derivative::Derivative;
 
-use crate::fft::{fft_2D, FFTType, FFTParams};
+use crate::{fft::{fft_2D, FFTParams, FFTType}, pyr::ImgBufferF, reg::Params};
 
 
 fn save_image(im: &egui::ColorImage, path: &str) {
@@ -185,9 +185,12 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
     h3
 }
 
+
+
 fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
     let mut selected_text = "";
     let h3 = &mut uimx.h3;
+    let combo_width = 100.0;
 
     ui.vertical(|ui|{
         match h3 {
@@ -266,6 +269,27 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
             Homography::Reg {proj} => {
                 selected_text = "Reg";
                 ui.label("Reg");
+
+                // src img
+                egui::ComboBox::from_id_source(100000 - index)
+                                .width(combo_width)
+                                .selected_text(selected_text)
+                                .show_ui(ui, |ui|{
+
+                                });
+
+                // dst img
+                egui::ComboBox::from_id_source(100000 - index - 1)
+                                .width(combo_width)
+                                .selected_text(selected_text)
+                                .show_ui(ui, |ui|{
+
+                                });
+
+                // check if both src and dst are not None
+                // detect change set new ECC
+                // tick ECC, return new Projection
+                // progress bar - level of pyramid, progress inside of the level
             },
         }
 
@@ -274,7 +298,7 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
 
         // combo - change homography type
         egui::ComboBox::from_id_source(index)
-            .width(100.0)
+            .width(combo_width)
             .selected_text(selected_text)
             .show_ui(ui, |ui|{
                 ui.selectable_value(h3, Homography::I, format!("I"));
