@@ -378,18 +378,19 @@ fn increment2(ir: &FeatureVector, iw: &FeatureVector, GT_G_inv_GT: &DMatrix::<f3
     GT_G_inv_GT * (lambda * ir - iw)
 }
 
-struct ECCPyr<'a> {
+#[derive(Clone)]
+pub struct ECCPyr {
     src_pyramid: Vec<ImgBufferF>,
     dst_pyramid: Vec<ImgBufferF>,
     level: usize,
     params: Option<Params>,
     num_points: u32,
-    ecc_impl: Option<ECCImpl<'a>>,
+    ecc_impl: Option<ECCImpl>,
 }
 
-impl<'a> ECCPyr<'a>
+impl ECCPyr
 {
-    fn new(src: ImgBufferU8, dst: ImgBufferU8) -> Self {
+    pub fn new(src: ImgBufferU8, dst: ImgBufferU8) -> Self {
         let src_pyramid = create_pyramid(&src);
         let dst_pyramid = create_pyramid(&dst);
         let params = Some(Params::new(ParamsType::Trz));
@@ -404,7 +405,7 @@ impl<'a> ECCPyr<'a>
         }
     }
 
-    fn tick(&'a mut self) -> Option<Params> {
+    pub fn tick(&mut self) -> Option<Params> {
         assert!(self.src_pyramid.len() == self.dst_pyramid.len());
 
         let done = (self.level >= self.src_pyramid.len() && self.ecc_impl.is_some() && self.ecc_impl.as_ref().unwrap().is_done()) || self.params.is_none();
@@ -429,9 +430,8 @@ impl<'a> ECCPyr<'a>
     }
 }
 
-struct ECCImpl<'a> {
-    ir: &'a ImgBufferF,
-    iw: &'a ImgBufferF,
+#[derive(Clone)]
+struct ECCImpl {
     x: Vec<(u32, u32)>,
     ecc_coeff_max: f32,
     params: Params,
@@ -440,11 +440,9 @@ struct ECCImpl<'a> {
     done: bool,
 }
 
-impl<'a> ECCImpl<'a> {
-    fn new(ir: &'a ImgBufferF, iw: &'a ImgBufferF, x: Vec<(u32, u32)>, params: &Params) -> ECCImpl<'a> {
+impl ECCImpl {
+    fn new(x: Vec<(u32, u32)>, params: &Params) -> ECCImpl {
         ECCImpl {
-            ir,
-            iw,
             x,
             ecc_coeff_max: -1000.0,
             params: params.clone(),
@@ -458,13 +456,13 @@ impl<'a> ECCImpl<'a> {
         self.done
     }
 
-    fn tick(&mut self) -> Option<Params> {
+    fn tick(&mut self, ir: &ImgBufferF, iw: &ImgBufferF,) -> Option<Params> {
         if self.done {
             return self.params_best.clone();
         }
 
         let normalize_feature_vector = false; // don't normalize feature vector. TODO: remove this parameter
-        let (ecc_coeff_approximation, inc) = ecc_increment(self.ir, self.iw, &self.x, &mut self.params, normalize_feature_vector);
+        let (ecc_coeff_approximation, inc) = ecc_increment(&ir, &iw, &self.x, &mut self.params, normalize_feature_vector);
 
         let mut last_is_largest = false;
 

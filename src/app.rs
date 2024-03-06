@@ -3,7 +3,7 @@ use imageproc::geometric_transformations::{Projection, warp_into, Interpolation}
 use egui::ColorImage;
 use derivative::Derivative;
 
-use crate::{fft::{fft_2D, FFTParams, FFTType}, pyr::ImgBufferF, reg::Params};
+use crate::{fft::{fft_2D, FFTParams, FFTType}, pyr::ImgBufferF, reg::{ECCPyr, Params}};
 
 
 fn save_image(im: &egui::ColorImage, path: &str) {
@@ -159,7 +159,7 @@ enum Homography {
     },
     Reg {
         #[derivative(PartialEq = "ignore")]
-        proj: Option<Projection>,
+        proj: Option<ECCPyr>,
     },
 }
 
@@ -266,7 +266,7 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                     ui.label("Invalid");
                 }
             },
-            Homography::Reg {proj} => {
+            Homography::Reg {ecc} => {
                 selected_text = "Reg";
                 ui.label("Reg");
 
