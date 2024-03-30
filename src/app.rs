@@ -366,7 +366,7 @@ impl AppData {
             match self.images[self.central_index].h3s[i].h3 {
                 Homography::Reg { src_img_ind, dst_img_ind, ref mut ecc } => {
                     if ecc.is_some() {
-                        ecc.as_mut().unwrap().tick();
+                        //ecc.as_mut().unwrap().tick();
                     } else {
                         src_img = src_img_ind;
                         dst_img = dst_img_ind;
@@ -599,11 +599,34 @@ fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui) {
 
                     let src_ind_changed = src_ind != *src_img_ind;
                     let dst_ind_changed = dst_ind != *dst_img_ind;
-                    *src_img_ind = src_ind;
-                    *dst_img_ind = dst_ind;
+
+                    if src_ind_changed {
+                        *src_img_ind = src_ind;
+                    }
+
+                    if dst_ind_changed {
+                        *dst_img_ind = dst_ind;
+                    }
+
+                    if ecc.is_some() {
+                        ui.label(format!("level: {}", ecc.as_ref().unwrap().get_level()));
+                        ui.label(format!("is_done {}", ecc.as_ref().unwrap().is_done()));
+
+                        if ui.button("tick").clicked() {
+                            ecc.as_mut().unwrap().tick();
+                        }
+
+                        if ui.button("reset").clicked() {
+                            *ecc = None;
+                        }
+                    }
 
                     if src_ind_changed || dst_ind_changed {
                         *ecc = None;
+                    }
+
+                    if ecc.is_some() {
+                        ecc.as_ref().unwrap();
                     }
                 },
             }

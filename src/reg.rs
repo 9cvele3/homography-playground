@@ -409,12 +409,18 @@ impl ECCPyr
         self.params.clone()
     }
 
+    pub fn get_level(&self) -> usize {
+        self.level
+    }
+
+    pub fn is_done(&self) -> bool {
+        (self.level >= self.src_pyramid.len() && self.ecc_impl.is_some() && self.ecc_impl.as_ref().unwrap().is_done()) || self.params.is_none()
+    }
+
     pub fn tick(&mut self) -> Option<Params> {
         assert!(self.src_pyramid.len() == self.dst_pyramid.len());
 
-        let done = (self.level >= self.src_pyramid.len() && self.ecc_impl.is_some() && self.ecc_impl.as_ref().unwrap().is_done()) || self.params.is_none();
-
-        if done {
+        if self.is_done() {
             return self.params.clone();
         }
 
