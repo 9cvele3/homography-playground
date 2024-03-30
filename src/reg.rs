@@ -405,6 +405,10 @@ impl ECCPyr
         }
     }
 
+    pub fn get_params(&self) -> Option<Params> {
+        self.params.clone()
+    }
+
     pub fn tick(&mut self) -> Option<Params> {
         assert!(self.src_pyramid.len() == self.dst_pyramid.len());
 
@@ -418,12 +422,17 @@ impl ECCPyr
             self.params.as_mut().unwrap().double_translation_params();
             let ind = self.src_pyramid.len() - 1 - self.level;
             let x = get_max_gradients(&self.src_pyramid[ind], self.num_points);
-            self.ecc_impl = Some(ECCImpl::new(&self.src_pyramid[ind], &self.dst_pyramid[ind], x, self.params.as_ref().unwrap()));
+            self.ecc_impl = Some(ECCImpl::new(x, self.params.as_ref().unwrap()));
             self.level += 1;
         }
 
-        self.params = self.ecc_impl.as_mut().unwrap().tick();
-        self.params.clone()
+        if self.src_pyramid.len() > self.level {
+            let ind = self.src_pyramid.len() - 1 - self.level;
+            self.params = self.ecc_impl.as_mut().unwrap().tick(&self.src_pyramid[ind], &self.dst_pyramid[ind]);
+            return self.params.clone();
+        } else {
+            return None;
+        }
     }
 
     fn get_progress() {
@@ -502,10 +511,10 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
     let mut w: std::fs::File = std::fs::OpenOptions::new().append(true).open("/tmp/ecc.log").unwrap();
     use std::io::Write;
 
-    let mut ecc_impl = ECCImpl::new(Ir, Iw, X.clone(), initial_params);
+    let mut ecc_impl = ECCImpl::new(X.clone(), initial_params);
 
     loop {
-        ecc_impl.tick();
+        ecc_impl.tick(Ir, Iw);
 
         if ecc_impl.is_done() {
             break;
@@ -515,7 +524,7 @@ fn ecc(Ir: &ImgBufferF, Iw: &ImgBufferF, initial_params: &Params, X: &Option<Vec
     // writeln!(&mut w, "{}", ecc_coeff_max).unwrap();
     // writeln!(&mut w, "{}", 0).unwrap();
 
-    ecc_impl.tick()
+    ecc_impl.tick(Ir, Iw)
 }
 
 fn calculate_jacobian(Iw: &ImgBufferF, X: &Vec<(u32, u32)>, P: &Params) -> Jacobian {

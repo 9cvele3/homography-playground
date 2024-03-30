@@ -1,3 +1,5 @@
+use std::{num, sync::Arc};
+
 use eframe::egui;
 use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
 use egui::ColorImage;
@@ -22,6 +24,20 @@ fn save_image(im: &egui::ColorImage, path: &str) {
         .expect("bad conversion");
 
     img.save(path).expect("Failed to save");
+}
+
+fn color_image_2_img_buffer(color_image: &egui::ColorImage) -> image::ImageBuffer<image::Luma<u8>, Vec<u8>> {
+    let size = color_image.size;
+    let mut pixels = Vec::with_capacity(size[0]*4*size[1]);
+    for pix in color_image.pixels.iter() {
+        pixels.push((pix.r() + pix.g() + pix.b()) / 3);
+    }
+
+    let res_img: image::ImageBuffer<image::Luma<u8>, Vec<u8>> =
+        image::ImageBuffer::from_raw(size[0] as u32, size[1] as u32, pixels)
+        .expect("bad conversion");
+
+    res_img
 }
 
 fn warp_image(out_w: u32, out_h: u32, im: &egui::ColorImage, h3: &Projection, alpha: u8) -> egui::ColorImage {
@@ -158,8 +174,11 @@ enum Homography {
         proj: Option<Projection>,
     },
     Reg {
+        src_img_ind: i32,
+        dst_img_ind: i32,
+
         #[derivative(PartialEq = "ignore")]
-        proj: Option<ECCPyr>,
+        ecc: Option<ECCPyr>,
     },
 }
 
@@ -168,14 +187,22 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         return Projection::scale(1.0, 1.0);
     }
 
-    let h3 = match uimx.h3 {
+    let h3 = match &uimx.h3 {
         Homography::I => { Projection::scale(1.0, 1.0) },
         Homography::R{angle} => Projection::rotate(angle * 2.0 * 3.14 / 360.0 ),
-        Homography::T{tx, ty} => Projection::translate(tx, ty),
-        Homography::S{sx, sy, isotropic: _ } => Projection::scale(sx, sy),
-        Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, h31, h32, h33]).expect("non invertible"),
+        Homography::T{tx, ty} => Projection::translate(*tx, *ty),
+        Homography::S{sx, sy, isotropic: _ } => Projection::scale(*sx, *sy),
+        Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, *h31, *h32, *h33]).expect("non invertible"),
         Homography::Points{prev_points_src : _, prev_points_dst : _, new_points_src : _, new_points_dst : _, proj} => proj.unwrap_or(Projection::scale(1.0, 1.0)),
-        Homography::Reg{ proj } => proj.unwrap_or(Projection::scale(1.0, 1.0)),
+        Homography::Reg{ src_img_ind, dst_img_ind, ref ecc } => if ecc.is_some() {
+            if let Some(params) = ecc.as_ref().unwrap().get_params() {
+                return params.get_projection_matrix().unwrap_or(Projection::scale(1.0, 1.0));
+            }
+
+            return Projection::scale(1.0, 1.0);
+        } else {
+            return Projection::scale(1.0, 1.0);
+        },
     };
 
     if uimx.inverse {
@@ -187,139 +214,6 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
 
 
 
-fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
-    let mut selected_text = "";
-    let h3 = &mut uimx.h3;
-    let combo_width = 100.0;
-
-    ui.vertical(|ui|{
-        match h3 {
-            Homography::I => {
-                selected_text = "I";
-                ui.label("Eye");
-            },
-            Homography::R{angle} => {
-                selected_text = "Rot";
-
-                ui.label("Rot");
-                ui.add(egui::Slider::new(angle, -360.0..=360.0).text("deg"));
-            },
-            Homography::S{sx, sy, isotropic} => {
-                selected_text = "Scale";
-
-                ui.label("Scale");
-                ui.add(egui::Slider::new(sx, 0.00001..=5.0));
-                ui.add(egui::Slider::new(sy, 0.00001..=5.0));
-                ui.checkbox(isotropic, "isotropic".to_string());
-
-                if *isotropic {
-                    *sy = *sx;
-                }
-            },
-            Homography::T{tx, ty}=>{
-                selected_text = "Trans";
-
-                ui.label("Trans");
-                ui.add(egui::Slider::new(tx, -2000.0..=2000.0));
-                ui.add(egui::Slider::new(ty, -2000.0..=2000.0));
-            },
-            Homography::P { h31, h32, h33 } => {
-                selected_text = "Proj";
-
-                ui.label("Proj");
-                ui.add(egui::Slider::new(h31, -0.01..=0.01));
-                ui.add(egui::Slider::new(h32, -0.01..=0.01));
-                ui.add(egui::Slider::new(h33, -5.0..=5.0));
-            },
-            Homography::Points { prev_points_src, prev_points_dst, new_points_src, new_points_dst, proj } => {
-                selected_text = "Points";
-                ui.label("Points");
-
-                ui.horizontal(|ui| {
-                    ui.label("src x");
-                    ui.label("src y");
-                    ui.label("dst x");
-                    ui.label("dst y");
-                });
-
-                for i in 0..=3 {
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut new_points_src[i].0).speed(0.1));
-                        ui.add(egui::DragValue::new(&mut new_points_src[i].1).speed(0.1));
-                        ui.add(egui::DragValue::new(&mut new_points_dst[i].0).speed(0.1));
-                        ui.add(egui::DragValue::new(&mut new_points_dst[i].1).speed(0.1));
-                    });
-                }
-
-                if new_points_src != prev_points_src || new_points_dst != prev_points_dst {
-                    for i in 0..4 {
-                        prev_points_src[i] = new_points_src[i];
-                        prev_points_dst[i] = new_points_dst[i];
-                    }
-
-                    *proj = Projection::from_control_points(new_points_src.clone(), new_points_dst.clone());
-                }
-
-                if proj.is_some() {
-                    ui.label("Valid");
-                } else {
-                    ui.label("Invalid");
-                }
-            },
-            Homography::Reg {ecc} => {
-                selected_text = "Reg";
-                ui.label("Reg");
-
-                // src img
-                egui::ComboBox::from_id_source(100000 - index)
-                                .width(combo_width)
-                                .selected_text(selected_text)
-                                .show_ui(ui, |ui|{
-
-                                });
-
-                // dst img
-                egui::ComboBox::from_id_source(100000 - index - 1)
-                                .width(combo_width)
-                                .selected_text(selected_text)
-                                .show_ui(ui, |ui|{
-
-                                });
-
-                // check if both src and dst are not None
-                // detect change set new ECC
-                // tick ECC, return new Projection
-                // progress bar - level of pyramid, progress inside of the level
-            },
-        }
-
-        ui.checkbox(&mut uimx.on, "on/off".to_string());
-        ui.checkbox(&mut uimx.inverse, "inverse".to_string());
-
-        // combo - change homography type
-        egui::ComboBox::from_id_source(index)
-            .width(combo_width)
-            .selected_text(selected_text)
-            .show_ui(ui, |ui|{
-                ui.selectable_value(h3, Homography::I, format!("I"));
-                ui.selectable_value(h3, Homography::R{angle: 0.0}, format!("Rot"));
-                ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0, isotropic: false}, format!("Scale"));
-                ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
-                ui.selectable_value(h3, Homography::P{h31: 0.0, h32: 0.0, h33: 1.0}, format!("Proj"));
-                let points: [(f32, f32); 4]  = [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)];
-
-                ui.selectable_value(h3, Homography::Points{
-                    prev_points_src: points.clone(),
-                    prev_points_dst: points.clone(),
-                    new_points_src: points.clone(),
-                    new_points_dst: points.clone(),
-                    proj: Some(Projection::scale(1.0, 1.0)),
-                }, format!("Points"));
-
-                ui.selectable_value(h3, Homography::Reg { proj: None }, format!("Reg"));
-            });
-    });
-}
 
 #[derive(Clone)]
 struct UIMatrix {
@@ -344,6 +238,10 @@ struct SingleImage {
     color_image: ColorImage,
     alpha: u8,
     h3s: Vec<UIMatrix>,
+}
+
+impl SingleImage {
+
 }
 
 pub struct AppData {
@@ -451,11 +349,45 @@ impl AppData {
             .auto_shrink([false, true])
             .show(ui, |ui| {
                 ui.horizontal(|ui|{
-                    for (index, uimx) in self.get_central_image_mut().h3s.iter_mut().enumerate() {
-                        display_h3(ui, uimx, index.try_into().unwrap());
-                    }
+                    let num_images = self.images.len();
+                    let h3s = &mut self.images[self.central_index].h3s;
+                    display_h3s(h3s, num_images, ui);
                 });
             });
+    }
+
+    fn tick(&mut self) {
+        let num_h3s = self.images[self.central_index].h3s.len();
+
+        for i in 0..num_h3s {
+            let mut src_img = -1;
+            let mut dst_img = -1;
+
+            match self.images[self.central_index].h3s[i].h3 {
+                Homography::Reg { src_img_ind, dst_img_ind, ref mut ecc } => {
+                    if ecc.is_some() {
+                        ecc.as_mut().unwrap().tick();
+                    } else {
+                        src_img = src_img_ind;
+                        dst_img = dst_img_ind;
+                    }
+                }
+                _ => {}
+            };
+
+            if src_img > -1 && dst_img > -1 {
+                let img1 = color_image_2_img_buffer(&self.images[src_img as usize].color_image);
+                let img2 = color_image_2_img_buffer(&self.images[dst_img as usize].color_image);
+
+                match self.images[self.central_index].h3s[i].h3 {
+                    Homography::Reg { src_img_ind, dst_img_ind, ref mut ecc } => {
+                        *ecc = Some(ECCPyr::new(img1, img2));
+                    }
+                    _ => {}
+                };
+            }
+
+        }
     }
 
     fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui, single_image: &SingleImage, available_width: f32, available_height: f32, texid: String, rect: &mut Option<egui::Rect>) {
@@ -553,6 +485,158 @@ impl AppData {
     }
 }
 
+
+fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui) {
+    let num_h3s = h3s.len();
+
+    for index in 0..num_h3s {
+        // index.try_into().unwrap()
+
+        ui.vertical(|ui|{
+            let uimx = &mut h3s[index];
+            let mut selected_text = "";
+            let h3: &mut Homography = &mut uimx.h3;
+            let combo_width = 100.0;
+
+            match h3 {
+                Homography::I => {
+                    selected_text = "I";
+                    ui.label("Eye");
+                },
+                Homography::R{angle} => {
+                    selected_text = "Rot";
+
+                    ui.label("Rot");
+                    ui.add(egui::Slider::new(angle, -360.0..=360.0).text("deg"));
+                },
+                Homography::S{sx, sy, isotropic} => {
+                    selected_text = "Scale";
+
+                    ui.label("Scale");
+                    ui.add(egui::Slider::new(sx, 0.00001..=5.0));
+                    ui.add(egui::Slider::new(sy, 0.00001..=5.0));
+                    ui.checkbox(isotropic, "isotropic".to_string());
+
+                    if *isotropic {
+                        *sy = *sx;
+                    }
+                },
+                Homography::T{tx, ty}=>{
+                    selected_text = "Trans";
+
+                    ui.label("Trans");
+                    ui.add(egui::Slider::new(tx, -2000.0..=2000.0));
+                    ui.add(egui::Slider::new(ty, -2000.0..=2000.0));
+                },
+                Homography::P { h31, h32, h33 } => {
+                    selected_text = "Proj";
+
+                    ui.label("Proj");
+                    ui.add(egui::Slider::new(h31, -0.01..=0.01));
+                    ui.add(egui::Slider::new(h32, -0.01..=0.01));
+                    ui.add(egui::Slider::new(h33, -5.0..=5.0));
+                },
+                Homography::Points { prev_points_src, prev_points_dst, new_points_src, new_points_dst, proj } => {
+                    selected_text = "Points";
+                    ui.label("Points");
+
+                    ui.horizontal(|ui| {
+                        ui.label("src x");
+                        ui.label("src y");
+                        ui.label("dst x");
+                        ui.label("dst y");
+                    });
+
+                    for i in 0..=3 {
+                        ui.horizontal(|ui| {
+                            ui.add(egui::DragValue::new(&mut new_points_src[i].0).speed(0.1));
+                            ui.add(egui::DragValue::new(&mut new_points_src[i].1).speed(0.1));
+                            ui.add(egui::DragValue::new(&mut new_points_dst[i].0).speed(0.1));
+                            ui.add(egui::DragValue::new(&mut new_points_dst[i].1).speed(0.1));
+                        });
+                    }
+
+                    if new_points_src != prev_points_src || new_points_dst != prev_points_dst {
+                        for i in 0..4 {
+                            prev_points_src[i] = new_points_src[i];
+                            prev_points_dst[i] = new_points_dst[i];
+                        }
+
+                        *proj = Projection::from_control_points(new_points_src.clone(), new_points_dst.clone());
+                    }
+
+                    if proj.is_some() {
+                        ui.label("Valid");
+                    } else {
+                        ui.label("Invalid");
+                    }
+                },
+                Homography::Reg {src_img_ind, dst_img_ind, ecc} => {
+                    selected_text = "Reg";
+                    ui.label("Reg");
+
+                    // src img
+                    let mut src_ind = *src_img_ind;
+                    egui::ComboBox::from_id_source(100000 - index)
+                                    .width(combo_width)
+                                    .selected_text(src_ind.to_string())
+                                    .show_ui(ui, |ui|{
+                                        for ind in 0..num_images {
+                                            ui.selectable_value(&mut src_ind, ind as i32, ind.to_string());
+                                        }
+                                    });
+
+                    // dst img
+                    let mut dst_ind = *dst_img_ind;
+                    egui::ComboBox::from_id_source(100000 - index - 1)
+                                    .width(combo_width)
+                                    .selected_text(dst_ind.to_string())
+                                    .show_ui(ui, |ui|{
+                                        for ind in 0..num_images {
+                                            ui.selectable_value(&mut dst_ind, ind as i32, ind.to_string());
+                                        }
+                                    });
+
+                    let src_ind_changed = src_ind != *src_img_ind;
+                    let dst_ind_changed = dst_ind != *dst_img_ind;
+                    *src_img_ind = src_ind;
+                    *dst_img_ind = dst_ind;
+
+                    if src_ind_changed || dst_ind_changed {
+                        *ecc = None;
+                    }
+                },
+            }
+
+            ui.checkbox(&mut uimx.on, "on/off".to_string());
+            ui.checkbox(&mut uimx.inverse, "inverse".to_string());
+
+            // combo - change homography type
+            egui::ComboBox::from_id_source(index)
+                .width(combo_width)
+                .selected_text(selected_text)
+                .show_ui(ui, |ui|{
+                    ui.selectable_value(h3, Homography::I, format!("I"));
+                    ui.selectable_value(h3, Homography::R{angle: 0.0}, format!("Rot"));
+                    ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0, isotropic: false}, format!("Scale"));
+                    ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
+                    ui.selectable_value(h3, Homography::P{h31: 0.0, h32: 0.0, h33: 1.0}, format!("Proj"));
+                    let points: [(f32, f32); 4]  = [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)];
+
+                    ui.selectable_value(h3, Homography::Points{
+                        prev_points_src: points.clone(),
+                        prev_points_dst: points.clone(),
+                        new_points_src: points.clone(),
+                        new_points_dst: points.clone(),
+                        proj: Some(Projection::scale(1.0, 1.0)),
+                    }, format!("Points"));
+
+                    ui.selectable_value(h3, Homography::Reg { src_img_ind: 0, dst_img_ind: 0, ecc: None }, format!("Reg"));
+                });
+        });
+    }
+}
+
 impl eframe::App for AppData {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.files_dropped(&ctx.input().raw.dropped_files[..]);
@@ -561,6 +645,7 @@ impl eframe::App for AppData {
             ui.vertical(|ui|{
                 self.display_thumbs(ctx, ui);
                 self.display_homographies_panel(ui);
+                self.tick();
                 self.display_out_size_factor(ui);
                 self.display_images(ctx, ui);
             });
