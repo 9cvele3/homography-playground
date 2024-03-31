@@ -409,6 +409,10 @@ impl ECCPyr
         self.params.clone()
     }
 
+    pub fn get_num_levels(&self) -> usize {
+        self.src_pyramid.len()
+    }
+
     pub fn get_level(&self) -> usize {
         self.level
     }
@@ -421,6 +425,7 @@ impl ECCPyr
         assert!(self.src_pyramid.len() == self.dst_pyramid.len());
 
         if self.is_done() {
+            println!("Tick Done");
             return self.params.clone();
         }
 
@@ -435,8 +440,10 @@ impl ECCPyr
         if self.src_pyramid.len() > self.level {
             let ind = self.src_pyramid.len() - 1 - self.level;
             self.params = self.ecc_impl.as_mut().unwrap().tick(&self.src_pyramid[ind], &self.dst_pyramid[ind]);
+            println!("Tick tick");
             return self.params.clone();
         } else {
+            println!("Tick Invalid");
             return None;
         }
     }
@@ -499,7 +506,8 @@ impl ECCImpl {
         };
 
         let threshold = 0.00001;
-        self.done = should_continue && inc.norm() < threshold;
+        self.done = !should_continue || inc.norm() < threshold;
+        println!("Internal tick - done {}, should_continue {}, cond {}", self.done, should_continue, inc.norm() < threshold);
 
         self.num_iter += 1;
         self.params_best.clone()

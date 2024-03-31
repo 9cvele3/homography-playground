@@ -609,6 +609,7 @@ fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui) {
                     }
 
                     if ecc.is_some() {
+                        ui.label(format!("Total levels: {}", ecc.as_ref().unwrap().get_num_levels()));
                         ui.label(format!("level: {}", ecc.as_ref().unwrap().get_level()));
                         ui.label(format!("is_done {}", ecc.as_ref().unwrap().is_done()));
 
