@@ -247,6 +247,7 @@ impl SingleImage {
 pub struct AppData {
     images: Vec<SingleImage>,
     central_index: usize,
+    image_to_highlight: i32,
     fill_canvas: bool,
     out_size_factor: f32,
     blend_all: bool,
@@ -278,6 +279,7 @@ impl AppData {
         Self {
             images,
             central_index: 0,
+            image_to_highlight: -1,
             fill_canvas: true,
             out_size_factor: 1.0,
             blend_all: false,
@@ -327,7 +329,13 @@ impl AppData {
                 let texture = ctx.load_texture(format!("thumb"), img.color_image.clone(), egui::TextureFilter::Linear);
 
                 ui.vertical(|ui| {
-                    if ui.add(egui::ImageButton::new(&texture, out_size)).clicked() {
+                    let mut imgbutton = egui::ImageButton::new(&texture, out_size);
+
+                    if self.image_to_highlight == ind as i32 {
+                        imgbutton = imgbutton.selected(true);
+                    }
+
+                    if ui.add(imgbutton).clicked() {
                         self.central_index = ind;
                     }
 
@@ -339,6 +347,8 @@ impl AppData {
 
             ui.label("Drag and drop images");
         });
+
+        self.image_to_highlight = -1;
     }
 
     fn display_homographies_panel(&mut self, ui: &mut egui::Ui) {
@@ -351,7 +361,7 @@ impl AppData {
                 ui.horizontal(|ui|{
                     let num_images = self.images.len();
                     let h3s = &mut self.images[self.central_index].h3s;
-                    display_h3s(h3s, num_images, ui);
+                    display_h3s(h3s, num_images, ui, &mut self.image_to_highlight);
                 });
             });
     }
@@ -486,7 +496,7 @@ impl AppData {
 }
 
 
-fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui) {
+fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui, image_to_highlight: &mut i32) {
     let num_h3s = h3s.len();
 
     for index in 0..num_h3s {
@@ -582,7 +592,8 @@ fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui) {
                                     .selected_text(src_ind.to_string())
                                     .show_ui(ui, |ui|{
                                         for ind in 0..num_images {
-                                            ui.selectable_value(&mut src_ind, ind as i32, ind.to_string());
+                                            ui.selectable_value(&mut src_ind, ind as i32, ind.to_string())
+                                                .on_hover_ui(|ui| *image_to_highlight = ind as i32);
                                         }
                                     });
 
@@ -593,7 +604,8 @@ fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui) {
                                     .selected_text(dst_ind.to_string())
                                     .show_ui(ui, |ui|{
                                         for ind in 0..num_images {
-                                            ui.selectable_value(&mut dst_ind, ind as i32, ind.to_string());
+                                            ui.selectable_value(&mut dst_ind, ind as i32, ind.to_string())
+                                                .on_hover_ui(|ui| *image_to_highlight = ind as i32);
                                         }
                                     });
 
@@ -655,7 +667,7 @@ fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui) {
                         proj: Some(Projection::scale(1.0, 1.0)),
                     }, format!("Points"));
 
-                    ui.selectable_value(h3, Homography::Reg { src_img_ind: 0, dst_img_ind: 0, ecc: None }, format!("Reg"));
+                    ui.selectable_value(h3, Homography::Reg { src_img_ind: -1, dst_img_ind: -1, ecc: None }, format!("Reg"));
                 });
         });
     }
