@@ -403,8 +403,12 @@ impl AppData {
             });
     }
 
-    fn draw_point(&self, ui: &mut egui::Ui, x: f32, y: f32) {
-        ui.painter().add(egui::Shape::circle_filled(egui::Pos2{ x, y }, 3.0, egui::Color32::YELLOW));
+    fn draw_point(&self, ui: &mut egui::Ui, x: f32, y: f32, rect: &egui::Rect) {
+        if x >= 0.0 && y >= 0.0 && x <= rect.max.x - rect.min.x && y <= rect.max.y - rect.min.y {
+            let x_offset = rect.min.x;
+            let y_offset = rect.min.y;
+            ui.painter().add(egui::Shape::circle_filled(egui::Pos2{ x: x_offset + x, y: y_offset + y }, 3.0, egui::Color32::YELLOW));
+        }
     }
 
     fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui, single_image: &SingleImage, available_width: f32, available_height: f32, texid: String, rect: &mut Option<egui::Rect>) {
@@ -450,15 +454,13 @@ impl AppData {
             let h3_coeffs = get_h3_coeffs(&h);
 
             if h3_coeffs.len() == 9 && h3_coeffs[8] != 0.0 {
-                let x_offset = rect.as_ref().unwrap().min.x;
-                let y_offset = rect.as_ref().unwrap().min.y;
 
                 if h3_coeffs[6] != 0.0 {
-                    self.draw_point(ui, x_offset + h3_coeffs[0] / h3_coeffs[6], y_offset + h3_coeffs[3] / h3_coeffs[6]);
+                    self.draw_point(ui, h3_coeffs[0] / h3_coeffs[6], h3_coeffs[3] / h3_coeffs[6], rect.as_ref().unwrap());
                 }
 
                 if h3_coeffs[7] != 0.0 {
-                    self.draw_point(ui, x_offset + h3_coeffs[1] / h3_coeffs[7], y_offset + h3_coeffs[4] / h3_coeffs[7]);
+                    self.draw_point(ui, h3_coeffs[1] / h3_coeffs[7], h3_coeffs[4] / h3_coeffs[7], rect.as_ref().unwrap());
                 }
             }
         }
