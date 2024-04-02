@@ -102,25 +102,34 @@ fn get_lena() -> Result<egui::ColorImage, image::ImageError> {
     Ok(image)
 }
 
+fn get_h3_coeffs(h3: &Projection) -> Vec<f32> {
+    let h3_str = format!("{:?}", h3);
+    let istart = h3_str.find("[");
+    let iend = h3_str.find("]");
+
+    if istart.is_some() && iend.is_some() {
+        let coeffs = &h3_str[istart.unwrap() + 1..iend.unwrap()];
+        let coll: Vec<f32> = coeffs.split(',')
+                    .filter_map(|el| el.trim().parse::<f32>().ok())
+                    .collect();
+
+        return coll;
+    }
+
+    vec![]
+}
+
 fn display_homography(ui: &mut egui::Ui, h3: &Projection) {
     ui.vertical(|ui|{
         egui::Grid::new("some_unique_id")
         .striped(true)
         .show(ui, |ui| {
-            let h3_str = format!("{:?}", h3);
-            let istart = h3_str.find("[");
-            let iend = h3_str.find("]");
-
-            if istart.is_some() && iend.is_some() {
-                let coeffs = &h3_str[istart.unwrap() + 1..iend.unwrap()];
-                //ui.label(coeffs);
-                for (i, coeff) in coeffs.split(',').enumerate() {
-                    if i % 3 == 0 && i > 0{
-                        ui.end_row();
-                    }
-
-                    ui.label(format!("{:.5}", coeff));
+            for (i, coeff) in get_h3_coeffs(h3).iter().enumerate() {
+                if i % 3 == 0 && i > 0{
+                    ui.end_row();
                 }
+
+                ui.label(format!("{:.5}", coeff));
             }
         });
     });
@@ -394,6 +403,10 @@ impl AppData {
             });
     }
 
+    fn draw_point(&self, ui: &mut egui::Ui, x: f32, y: f32) {
+        ui.painter().add(egui::Shape::circle_filled(egui::Pos2{ x, y }, 3.0, egui::Color32::YELLOW));
+    }
+
     fn display_image(&self, ctx: &egui::Context, ui: &mut egui::Ui, single_image: &SingleImage, available_width: f32, available_height: f32, texid: String, rect: &mut Option<egui::Rect>) {
         let mut h = Projection::scale(1.0, 1.0);
 
@@ -409,7 +422,7 @@ impl AppData {
                 let out_h = available_height * self.out_size_factor;
 
                 let tx = (out_w - self.get_central_image().color_image.size[0] as f32) / 2.0;
-                let ty = (out_h - self.get_central_image().color_image.size[1] as f32)/ 2.0;
+                let ty = (out_h - self.get_central_image().color_image.size[1] as f32) / 2.0;
                 let translation = Projection::translate(tx, ty);
                 h = translation * h;
 
@@ -427,8 +440,27 @@ impl AppData {
         if let Some(rect) = rect {
             let imgw = egui::Image::new(&texture, out_size);
             ui.put(*rect, imgw);
+
         } else {
             *rect = Some(ui.image(&texture, out_size).rect);
+        }
+
+        // draw vanishing points
+        {
+            let h3_coeffs = get_h3_coeffs(&h);
+
+            if h3_coeffs.len() == 9 && h3_coeffs[8] != 0.0 {
+                let x_offset = rect.as_ref().unwrap().min.x;
+                let y_offset = rect.as_ref().unwrap().min.y;
+
+                if h3_coeffs[6] != 0.0 {
+                    self.draw_point(ui, x_offset + h3_coeffs[0] / h3_coeffs[6], y_offset + h3_coeffs[3] / h3_coeffs[6]);
+                }
+
+                if h3_coeffs[7] != 0.0 {
+                    self.draw_point(ui, x_offset + h3_coeffs[1] / h3_coeffs[7], y_offset + h3_coeffs[4] / h3_coeffs[7]);
+                }
+            }
         }
     }
 
