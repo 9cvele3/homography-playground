@@ -162,7 +162,7 @@ enum Homography {
         h31: f32,
         h32: f32,
         h33: f32
-    } ,
+    },
     Points {
         new_points_src: [(f32, f32); 4],
         new_points_dst: [(f32, f32); 4],
@@ -194,14 +194,14 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         Homography::S{sx, sy, isotropic: _ } => Projection::scale(*sx, *sy),
         Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, *h31, *h32, *h33]).expect("non invertible"),
         Homography::Points{prev_points_src : _, prev_points_dst : _, new_points_src : _, new_points_dst : _, proj} => proj.unwrap_or(Projection::scale(1.0, 1.0)),
-        Homography::Reg{ src_img_ind, dst_img_ind, ref ecc } => if ecc.is_some() {
+        Homography::Reg{ src_img_ind: _, dst_img_ind: _, ref ecc } => if ecc.is_some() {
             if let Some(params) = ecc.as_ref().unwrap().get_params() {
-                return params.get_projection_matrix().unwrap_or(Projection::scale(1.0, 1.0));
+                params.get_projection_matrix().unwrap_or(Projection::scale(1.0, 1.0))
+            } else {
+                Projection::scale(1.0, 1.0)
             }
-
-            return Projection::scale(1.0, 1.0);
         } else {
-            return Projection::scale(1.0, 1.0);
+            Projection::scale(1.0, 1.0)
         },
     };
 
@@ -241,7 +241,25 @@ struct SingleImage {
 }
 
 impl SingleImage {
+    fn new(path: &std::path::Path) -> Self {
+        let color_image = {
+            let ci = load_image_from_path(&path);
 
+            if ci.is_ok() {
+                ci.unwrap()
+            } else {
+                get_lena().unwrap()
+            }
+        };
+
+        let h3s = vec![UIMatrix::new(); 10];
+
+        SingleImage {
+            color_image,
+            alpha: 255,
+            h3s,
+        }
+    }
 }
 
 pub struct AppData {
@@ -257,24 +275,13 @@ pub struct AppData {
 
 impl AppData {
     pub fn new() -> Self {
-        let path = std::path::PathBuf::from("./img/lena-gray.png");
-        let color_image = {
-            let ci = load_image_from_path(&path);
+        let path1 = std::path::PathBuf::from("./img/lena-gray.png");
+        let si1 = SingleImage::new(&path1);
 
-            if ci.is_ok() {
-                ci.unwrap()
-            } else {
-                get_lena().unwrap()
-            }
-        };
+        let path2 = std::path::PathBuf::from("./img/lena-trans-x5-y10.png");
+        let si2 = SingleImage::new(&path2);
 
-        let h3s = vec![UIMatrix::new(); 10];
-
-        let images = vec![SingleImage {
-            color_image,
-            alpha: 255,
-            h3s,
-        }];
+        let images = vec![si1, si2];
 
         Self {
             images,
@@ -390,7 +397,7 @@ impl AppData {
                 let img2 = color_image_2_img_buffer(&self.images[dst_img as usize].color_image);
 
                 match self.images[self.central_index].h3s[i].h3 {
-                    Homography::Reg { src_img_ind, dst_img_ind, ref mut ecc } => {
+                    Homography::Reg { src_img_ind: _, dst_img_ind: _, ref mut ecc } => {
                         *ecc = Some(ECCPyr::new(img1, img2));
                     }
                     _ => {}
