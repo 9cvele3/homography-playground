@@ -673,6 +673,27 @@ fn display_h3s(h3s: &mut Vec<UIMatrix>, num_images: usize, ui: &mut egui::Ui, im
     }
 }
 
+#[test]
+fn test_4_points() {
+    let points_dst: [(f32, f32); 4] = [
+        (-104.7839007, 41.1755658),
+        (-104.7475097, 41.1532789),
+        (-104.7866657, 41.1359955),
+        (-104.8000511, 41.1444530),
+    ];
+
+    let points_src: [(f32, f32); 4] = [
+        (0.0, 0.0),
+        (0.0, 1920.0),
+        (1080.0, 1920.0),
+        (1080.0, 0.0),
+    ];
+
+    let proj = Projection::from_control_points(points_src, points_dst);
+    assert_eq!(true, proj.is_some());
+    println!("proj: {:?}", proj);
+}
+
 impl eframe::App for AppData {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.files_dropped(&ctx.input().raw.dropped_files[..]);

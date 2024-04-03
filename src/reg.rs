@@ -1543,7 +1543,7 @@ fn test_ecc_no_pyr() {
                                         .open("/tmp/ecc.log").unwrap();
 
 
-    if let Some((p_res, v, f)) = ecc(&img1f, &img2f, &p, &Some(X), 0) {
+    if let Some(p_res) = ecc(&img1f, &img2f, &p, &Some(X), 0) {
         println!("End result: ");
         p_res.print_params();
         //params.print_params();
