@@ -1,6 +1,6 @@
 use eframe::egui;
 use imageproc::geometric_transformations::{Projection, warp_into, Interpolation};
-use egui::ColorImage;
+use egui::{Vec2, TextEdit, ColorImage};
 use puffin_egui::puffin;
 use std::io::{BufRead, BufReader, Cursor, Read, Seek};
 
@@ -154,6 +154,10 @@ enum Homography {
         h31: f32,
         h32: f32,
         h33: f32
+    },
+    Custom {
+        text_input: String,
+        coeffs: [f32; 9]
     }
 }
 
@@ -167,7 +171,8 @@ fn get_projection(uimx: &UIMatrix) -> Projection {
         Homography::R{angle} => Projection::rotate(angle * 2.0 * 3.14 / 360.0 ),
         Homography::T{tx, ty} => Projection::translate(tx, ty),
         Homography::S{sx, sy, isotropic: _ } => Projection::scale(sx, sy),
-        Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, h31, h32, h33]).expect("non invertible")
+        Homography::P{h31, h32, h33} => Projection::from_matrix([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, h31, h32, h33]).expect("non invertible"),
+        Homography::Custom{ coeffs, ..} => Projection::from_matrix([coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5], coeffs[6], coeffs[7], coeffs[8]]).expect("non invertible")
     };
 
     if uimx.inverse {
@@ -219,6 +224,27 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.add(egui::Slider::new(h31, -0.01..=0.01)).on_hover_text("h20");
                 ui.add(egui::Slider::new(h32, -0.01..=0.01)).on_hover_text("h21");
                 ui.add(egui::Slider::new(h33, -5.0..=5.0)).on_hover_text("h22");
+            },
+            Homography::Custom { text_input, coeffs} => {
+                selected_text = "Custom";
+
+                ui.label("Custom");
+
+                if ui.add_sized(Vec2{x: 100.0, y: 100.0}, TextEdit::multiline(text_input)).changed() {
+                    let new_coeffs : Vec<f32> = text_input.split_whitespace()
+                                            .filter_map(|el| el.parse::<f32>().ok())
+                                            .collect();
+
+                    if new_coeffs.len() != 9 {
+                        *coeffs = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+                    } else {
+                        for i in 0..9 {
+                            coeffs[i] = new_coeffs[i];
+                        }
+
+                        // println!("Custom coeffs {:?}", coeffs);
+                    }
+                }
             }
         }
 
@@ -235,6 +261,7 @@ fn display_h3(ui: &mut egui::Ui, uimx: &mut UIMatrix, index: i64) {
                 ui.selectable_value(h3, Homography::S{sx: 1.0, sy: 1.0, isotropic: false}, format!("Scale"));
                 ui.selectable_value(h3, Homography::T{tx: 0.0, ty: 0.0}, format!("Trans"));
                 ui.selectable_value(h3, Homography::P{h31: 0.0, h32: 0.0, h33: 1.0}, format!("Proj"));
+                ui.selectable_value(h3, Homography::Custom{text_input: "".to_string(), coeffs: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]}, format!("Custom"));
             });
     });
 }
