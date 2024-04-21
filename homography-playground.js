@@ -267,7 +267,7 @@ async function load(module, imports) {
 
 async function init(input) {
     if (typeof input === 'undefined') {
-        input = new URL('homography-playground-7caaa49be818628f_bg.wasm', import.meta.url);
+        input = new URL('homography-playground.wasm', import.meta.url);
     }
     const imports = {};
     imports.wbg = {};

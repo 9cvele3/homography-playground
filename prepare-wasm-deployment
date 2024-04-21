@@ -1,0 +1,13 @@
+#!/bin/bash
+
+rm -rf dist
+(trunk serve)&
+sleep 10
+curl 127.0.0.1:8080
+
+jobs -p | xargs -I{} kill -9 {}
+
+cp dist/homography-playground-*.js homography-playground.js
+sed -i 's/homography-playground-.*_bg\.wasm/homography-playground\.wasm/g' homography-playground.js
+cp dist/homography-playground-*.wasm homography-playground.wasm
+
